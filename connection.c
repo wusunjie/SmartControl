@@ -10,13 +10,17 @@
 
 #include <string.h>
 
+#include "connection.h"
+#include "list.h"
+
 struct tmclient {
 	struct event_base *base;
+    struct connection_cb cb;
+    struct list_head servers;
 	int port;
 };
 
 struct tmserver {
-	int id;
 	struct tmclient *client;
 	int status;
 	const char *uuid;
@@ -30,6 +34,7 @@ struct tmserver {
 	struct evhttp_uri *profile_ctrl;
 	struct evhttp_uri *profile_event;
 	int is_profile_sub;
+    struct list_head list;
 };
 
 static void tmclient_event_callback(struct evhttp_request *req, void *args);
@@ -40,7 +45,7 @@ static int parse_device_desc(struct tmserver *server, xmlChar *data);
 
 static struct tmserver *find_tmserver_by_uri(struct tmclient *client, const struct evhttp_uri *uri);
 
-struct tmclient *tmclient_start(struct event_base *base, ev_uint16_t port)
+struct tmclient *tmclient_start(struct event_base *base, ev_uint16_t port, struct connection_cb cb)
 {
 	struct evhttp_bound_socket *handle = 0;
 	struct sockaddr_storage ss;
@@ -52,6 +57,8 @@ struct tmclient *tmclient_start(struct event_base *base, ev_uint16_t port)
 		return 0;
 	}
 	client->base = base;
+    client->cb = cb;
+    INIT_LIST_HEAD(&(client->servers));
 	struct evhttp *http = evhttp_new(base);
 	if (!http) {
 		free(client);
@@ -98,6 +105,7 @@ struct tmserver *tmclient_get_description(struct tmclient *client, const char *r
         return NULL;
     }
     server->remote_uri = uri;
+    list_add(&(server->list), &(client->servers));
     req = evhttp_request_new(tmclient_soap_callback, server);
     if (!req) {
         evhttp_connection_free(conn);
@@ -308,7 +316,7 @@ static void tmclient_soap_callback(struct evhttp_request *req, void *args)
 	}
 }
 
-xmlNodePtr xmlFindChildElement(xmlNodePtr parent, xmlChar *name)
+static xmlNodePtr xmlFindChildElement(xmlNodePtr parent, xmlChar *name)
 {
     xmlNodePtr cur = xmlFirstElementChild(parent);
     for (; cur; cur = cur->next) {
@@ -322,7 +330,7 @@ xmlNodePtr xmlFindChildElement(xmlNodePtr parent, xmlChar *name)
     return NULL;
 }
 
-int parse_device_desc(struct tmserver *server, xmlChar *data)
+static int parse_device_desc(struct tmserver *server, xmlChar *data)
 {
     xmlDocPtr doc;
     doc = xmlParseDoc(data);
@@ -396,9 +404,22 @@ int parse_device_desc(struct tmserver *server, xmlChar *data)
     return 0;
 }
 
-struct tmserver *find_tmserver_by_uri(struct tmclient *client, const struct evhttp_uri *uri)
+static struct tmserver *find_tmserver_by_uri(struct tmclient *client, const struct evhttp_uri *uri)
 {
-    (void)client;
-    (void)uri;
-    return 0;
+    struct tmserver *server;
+    list_for_each_entry(server, &(client->servers), list) {
+        if (strcmp(evhttp_uri_get_host(uri),
+                   evhttp_uri_get_host(server->remote_uri))) {
+            continue;
+        }
+        if (strcmp(evhttp_uri_get_path(uri),
+                   evhttp_uri_get_path(server->remote_uri))) {
+            continue;
+        }
+        if (evhttp_uri_get_port(uri) ==
+                evhttp_uri_get_port(server->remote_uri)) {
+            return server;
+        }
+    }
+    return NULL;
 }

@@ -4,9 +4,13 @@ CONFIG -= app_bundle
 CONFIG -= qt
 
 SOURCES += main.c \
-    tmclient.c
+    connection.c
 
 
 unix: CONFIG += link_pkgconfig
 unix: PKGCONFIG += libevent
 unix: PKGCONFIG += libxml-2.0
+
+HEADERS += \
+    connection.h \
+    list.h
