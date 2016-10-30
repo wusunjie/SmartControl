@@ -38,9 +38,7 @@ static void tmclient_soap_callback(struct evhttp_request *req, void *args);
 static xmlNodePtr xmlFindChildElement(xmlNodePtr parent, xmlChar *name);
 static int parse_device_desc(struct tmserver *server, xmlChar *data);
 
-static struct tmserver *find_tmserver(struct tmclient *client, int id);
-static void remove_tmserver(struct tmclient *client, int id);
-static struct tmserver *find_tmserver_by_uri(const struct evhttp_uri *uri);
+static struct tmserver *find_tmserver_by_uri(struct tmclient *client, const struct evhttp_uri *uri);
 
 struct tmclient *tmclient_start(struct event_base *base, ev_uint16_t port)
 {
@@ -80,39 +78,43 @@ struct tmclient *tmclient_start(struct event_base *base, ev_uint16_t port)
 	return client;
 }
 
-int tmclient_get_description(struct tmclient *client, int id)
+struct tmserver *tmclient_get_description(struct tmclient *client, const char *remote_uri)
 {
-	struct tmserver *server = find_tmserver(client, id);
-	if (server) {
-		struct evhttp_request *req = 0;
-		struct evhttp_connection *conn = evhttp_connection_base_new(client->base, 0,
-			evhttp_uri_get_host(server->remote_uri), evhttp_uri_get_port(server->remote_uri));
-		if (!conn) {
-			remove_tmserver(client, id);
-			return -1;
-		}
-		evhttp_connection_set_timeout(conn, -1);
-		evhttp_connection_set_retries(conn, 5000);
-		req = evhttp_request_new(tmclient_soap_callback, server);
-		if (!req) {
-			evhttp_connection_free(conn);
-			remove_tmserver(client, id);
-			return -1;
-		}
-		if (-1 == evhttp_make_request(conn, req, EVHTTP_REQ_GET, evhttp_uri_get_path(server->remote_uri))) {
-			evhttp_request_free(req);
-			evhttp_connection_free(conn);
-			remove_tmserver(client, id);
-			return -1;
-		}
-		return 0;
-	}
-	return -1;
+    struct evhttp_request *req = 0;
+    struct evhttp_uri *uri = evhttp_uri_parse(remote_uri);
+    struct evhttp_connection *conn =
+            evhttp_connection_base_new(client->base, 0,
+            evhttp_uri_get_host(uri), evhttp_uri_get_port(uri));
+    if (!conn) {
+        evhttp_uri_free(uri);
+        return NULL;
+    }
+    evhttp_connection_set_timeout(conn, -1);
+    evhttp_connection_set_retries(conn, 5000);
+    struct tmserver *server = (struct tmserver *)calloc(1, sizeof(*server));
+    if (!server) {
+        evhttp_uri_free(uri);
+        evhttp_connection_free(conn);
+        return NULL;
+    }
+    server->remote_uri = uri;
+    req = evhttp_request_new(tmclient_soap_callback, server);
+    if (!req) {
+        evhttp_connection_free(conn);
+        free(server);
+        return NULL;
+    }
+    if (-1 == evhttp_make_request(conn, req, EVHTTP_REQ_GET, evhttp_uri_get_path(uri))) {
+        evhttp_request_free(req);
+        evhttp_connection_free(conn);
+        free(server);
+        return NULL;
+    }
+    return server;
 }
 
-int tmclient_subscribe_service(struct tmclient *client, int id, int sid)
+int tmclient_subscribe_service(struct tmclient *client, struct tmserver *server, int sid)
 {
-	struct tmserver *server = find_tmserver(client, id);
 	if (server) {
 		struct evhttp_request *req = 0;
 		struct evhttp_connection *conn = 0;
@@ -138,7 +140,6 @@ int tmclient_subscribe_service(struct tmclient *client, int id, int sid)
 		conn = evhttp_connection_base_new(client->base, 0,
 				evhttp_uri_get_host(event_uri), evhttp_uri_get_port(event_uri));
 		if (!conn) {
-			remove_tmserver(client, id);
 			return -1;
 		}
 		evhttp_connection_set_timeout(conn, -1);
@@ -146,7 +147,6 @@ int tmclient_subscribe_service(struct tmclient *client, int id, int sid)
 		req = evhttp_request_new(tmclient_soap_callback, server);
 		if (!req) {
 			evhttp_connection_free(conn);
-			remove_tmserver(client, id);
 			return -1;
 		}
 
@@ -156,7 +156,6 @@ int tmclient_subscribe_service(struct tmclient *client, int id, int sid)
 		memset(path_buf, 0, 256);
 		sprintf(path_buf, "%s: %d", server->local_addr, client->port);
 		evhttp_add_header(evhttp_request_get_output_headers(req), "CALLBACK", path_buf);
-
 		evhttp_add_header(evhttp_request_get_output_headers(req), "NT", "upnp:event");
 
 		memset(path_buf, 0, 256);
@@ -169,7 +168,6 @@ int tmclient_subscribe_service(struct tmclient *client, int id, int sid)
 		if (-1 == evhttp_make_request(conn, req, EVHTTP_REQ_SUB, path_buf)) {
 			evhttp_request_free(req);
 			evhttp_connection_free(conn);
-			remove_tmserver(client, id);
 			return -1;
 		}
 		return 0;
@@ -210,7 +208,7 @@ static void tmclient_event_callback(struct evhttp_request *req, void *args)
 	}
 
 	remote_uri = evhttp_request_get_evhttp_uri(req);
-    server = find_tmserver_by_uri(remote_uri);
+    server = find_tmserver_by_uri(client, remote_uri);
 	if (server) {
         if (!strcmp(evhttp_uri_get_path(server->appserver_event),
 			evhttp_uri_get_path(decoded))) {
@@ -284,9 +282,6 @@ static void tmclient_soap_callback(struct evhttp_request *req, void *args)
                             free(data);
                         }
                     }
-				}
-				else {
-					remove_tmserver(server->client, server->id);
 				}
 			}
 		}
@@ -401,17 +396,9 @@ int parse_device_desc(struct tmserver *server, xmlChar *data)
     return 0;
 }
 
-struct tmserver *find_tmserver(struct tmclient *client, int id)
+struct tmserver *find_tmserver_by_uri(struct tmclient *client, const struct evhttp_uri *uri)
 {
-    return 0;
-}
-
-void remove_tmserver(struct tmclient *client, int id)
-{
-
-}
-
-struct tmserver *find_tmserver_by_uri(const struct evhttp_uri *uri)
-{
+    (void)client;
+    (void)uri;
     return 0;
 }
