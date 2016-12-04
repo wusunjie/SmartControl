@@ -5,12 +5,14 @@
 
 static void test_server_added(struct tmclient *client, struct tmserver *server);
 static void test_server_removed(struct tmclient *client, struct tmserver *server);
+static void test_applist_update(struct tmclient *client, struct tmserver *server, struct app *apps, unsigned int count);
 
 int main(void)
 {
     struct connection_cb cb = {
         test_server_added,
-        test_server_removed
+        test_server_removed,
+        test_applist_update
     };
     struct event_base *base = event_base_new();
     struct tmclient *client = tmclient_start(base, 1900, cb);
@@ -20,11 +22,19 @@ int main(void)
 
 static void test_server_added(struct tmclient *client, struct tmserver *server)
 {
-    subscribe_service(client, server, 1);
+    get_application_list(client, server, 0, "*");
 }
 
 static void test_server_removed(struct tmclient *client, struct tmserver *server)
 {
     (void)client;
     (void)server;
+}
+
+static void test_applist_update(struct tmclient *client, struct tmserver *server, struct app *apps, unsigned int count)
+{
+    (void)client;
+    (void)server;
+    (void)apps;
+    (void)count;
 }

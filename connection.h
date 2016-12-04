@@ -4,11 +4,6 @@
 struct tmclient;
 struct tmserver;
 
-struct connection_cb {
-    void (*server_added)(struct tmclient *client, struct tmserver *server);
-    void (*server_removed)(struct tmclient *client, struct tmserver *server);
-};
-
 enum direction_info {
     DIRECTION_INFO_OUT,
     DIRECTION_INFO_IN,
@@ -69,6 +64,12 @@ struct app {
     struct remoting_info remoteinfo;
     struct app_info appinfo;
     struct audio_info audioinfo;
+};
+
+struct connection_cb {
+    void (*server_added)(struct tmclient *client, struct tmserver *server);
+    void (*server_removed)(struct tmclient *client, struct tmserver *server);
+    void (*applist_update)(struct tmclient *client, struct tmserver *server, struct app *apps, unsigned int count);
 };
 
 extern struct tmclient *tmclient_start(struct event_base *base, ev_uint16_t port, struct connection_cb cb);

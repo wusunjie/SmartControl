@@ -51,7 +51,7 @@ static void tmclient_soap_callback(struct evhttp_request *req, void *args);
 static xmlNodePtr xmlFindChildElement(xmlNodePtr parent, xmlChar *name);
 static int parse_device_desc(struct tmserver *server, xmlChar *data);
 static int parse_action_response(struct tmserver *server, xmlChar *data, int errcode);
-static struct app *parse_application_list(xmlNodePtr appListing);
+static struct app *parse_application_list(xmlNodePtr appListing, unsigned int *count);
 
 static struct tmserver *check_event(struct tmclient *client, struct evhttp_request *req);
 static int get_localaddr(char *local, const char *remote);
@@ -225,6 +225,8 @@ static int tmclient_send_soap_action(struct tmclient *client, struct tmserver *s
         struct evhttp_uri *ctrl_uri = NULL;
         const char *serviceType = NULL;
         char path_buf[65536] = {0};
+        const char *host = 0;
+        int port = -1;
         if (!server->status) {
             return -1;
         }
@@ -244,8 +246,16 @@ static int tmclient_send_soap_action(struct tmclient *client, struct tmserver *s
         if (!ctrl_uri) {
             return -1;
         }
+        host = evhttp_uri_get_host(ctrl_uri);
+        port = evhttp_uri_get_port(ctrl_uri);
+        if ((NULL == host) || (0 == strlen(host))) {
+            host = evhttp_uri_get_host(server->remote_uri);
+        }
+        if (-1 == port) {
+            port = evhttp_uri_get_port(server->remote_uri);
+        }
         conn = evhttp_connection_base_new(client->base, 0,
-                evhttp_uri_get_host(ctrl_uri), evhttp_uri_get_port(ctrl_uri));
+                host, port);
         if (!conn) {
             return -1;
         }
@@ -257,7 +267,7 @@ static int tmclient_send_soap_action(struct tmclient *client, struct tmserver *s
             return -1;
         }
 
-        sprintf(path_buf, "%s: %d", evhttp_uri_get_host(ctrl_uri), evhttp_uri_get_port(ctrl_uri));
+        sprintf(path_buf, "%s:%d", host, port);
         evhttp_add_header(evhttp_request_get_output_headers(req), "HOST", path_buf);
 
         memset(path_buf, 0, 65536);
@@ -284,9 +294,9 @@ static int tmclient_send_soap_action(struct tmclient *client, struct tmserver *s
                 "</s:Body>"
                 "</s:Envelope>", action, serviceType, body, action);
 
-        evbuffer_add(evhttp_request_get_output_buffer(req), body, strlen(body));
+        evbuffer_add(evhttp_request_get_output_buffer(req), path_buf, strlen(path_buf));
 
-        if (-1 == evhttp_make_request(conn, req, EVHTTP_REQ_POST, path_buf)) {
+        if (-1 == evhttp_make_request(conn, req, EVHTTP_REQ_POST, evhttp_uri_get_path(ctrl_uri))) {
             evhttp_request_free(req);
             evhttp_connection_free(conn);
             return -1;
@@ -447,7 +457,6 @@ static int parse_device_desc(struct tmserver *server, xmlChar *data)
             xmlChar *deviceType = xmlNodeGetContent(deviceTypeElement->children);
             if (xmlStrcmp(deviceType, BAD_CAST"urn:schemas-upnp-org:device:TmServerDevice:1")) {
                 xmlFree(deviceType);
-                xmlFreeNode(rootElement);
                 xmlFreeDoc(doc);
                 return -1;
             }
@@ -507,18 +516,29 @@ static int parse_device_desc(struct tmserver *server, xmlChar *data)
     return 0;
 }
 
-static struct app *parse_application_list(xmlNodePtr appListing)
+static struct app *parse_application_list(xmlNodePtr appListing, unsigned int *count)
 {
+    xmlDocPtr doc;
+    xmlChar *document = xmlNodeGetContent(appListing);
     unsigned int cnt = 0;
     struct app *appList = NULL;
-    for (xmlNodePtr cur = xmlFirstElementChild(appListing); cur; cur = cur->next) {
+    doc = xmlParseDoc(document);
+    if (!doc) {
+        return NULL;
+    }
+    xmlNodePtr rootElement = xmlDocGetRootElement(doc);
+    if (!rootElement) {
+        xmlFreeDoc(doc);
+        return NULL;
+    }
+    for (xmlNodePtr cur = xmlFirstElementChild(rootElement); cur; cur = cur->next) {
         if (cur->type != XML_ELEMENT_NODE) {
             continue;
         }
         if (!xmlStrcmp(cur->name, BAD_CAST"app")) {
             xmlNodePtr appElement = cur;
             if (appElement) {
-                appList = (struct app *)realloc(appList, cnt + 1);
+                appList = (struct app *)realloc(appList, (cnt + 1) * sizeof(*appList));
                 xmlNodePtr appIDElement = xmlFindChildElement(appElement, BAD_CAST"appID");
                 if (appIDElement) {
                     xmlChar *appID = xmlNodeGetContent(appIDElement->children);
@@ -555,12 +575,14 @@ static struct app *parse_application_list(xmlNodePtr appListing)
             }
         }
     }
+    *count = cnt;
+    xmlFree(document);
+    xmlFreeDoc(doc);
     return appList;
 }
 
 static int parse_action_response(struct tmserver *server, xmlChar *data, int errcode)
 {
-    (void)server;
     switch (errcode) {
     case 200:
     {
@@ -578,17 +600,28 @@ static int parse_action_response(struct tmserver *server, xmlChar *data, int err
         if (bodyElement) {
             xmlNodePtr actionRspElement = xmlFirstElementChild(bodyElement);
             if (actionRspElement) {
-                const xmlChar *actionName = xmlStrstr(actionRspElement->name, BAD_CAST"Response");
+                xmlChar *actionName = (xmlChar *)xmlStrstr(actionRspElement->name, BAD_CAST"Response");
+                if (actionName) {
+                    actionName = xmlStrsub(actionRspElement->name, 0, actionName - actionRspElement->name);
+                }
+                else {
+                    xmlFreeDoc(doc);
+                    return -1;
+                }
                 if (actionRspElement->ns) {
                     const xmlChar *serviceType = actionRspElement->ns->href;
                     if (!xmlStrcmp(serviceType, BAD_CAST"urn:schemas-upnp-org:service:TmApplicationServer:1")) {
                         if (!xmlStrcmp(actionName, BAD_CAST"GetApplicationList")) {
-                            struct app *appList = parse_application_list(xmlFirstElementChild(actionRspElement));
+                            unsigned int count = 0;
+                            struct app *appList = parse_application_list(xmlFirstElementChild(actionRspElement), &count);
                             if (appList) {
+                                if (server->client && server->client->cb.applist_update) {
+                                    server->client->cb.applist_update(server->client, server, appList, count);
+                                }
                                 free(appList);
                             }
                             else {
-                                xmlFreeNode(rootElement);
+                                xmlFree(actionName);
                                 xmlFreeDoc(doc);
                                 return -1;
                             }
@@ -601,10 +634,9 @@ static int parse_action_response(struct tmserver *server, xmlChar *data, int err
 
                     }
                 }
-
+                xmlFree(actionName);
             }
         }
-        xmlFreeNode(rootElement);
         xmlFreeDoc(doc);
     }
     }
