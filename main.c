@@ -23,6 +23,7 @@ int main(void)
 static void test_server_added(struct tmclient *client, struct tmserver *server)
 {
     get_application_list(client, server, 0, "*");
+    tmclient_stop(client);
 }
 
 static void test_server_removed(struct tmclient *client, struct tmserver *server)

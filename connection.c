@@ -10,12 +10,6 @@
 
 #include <string.h>
 
-#include <sys/types.h>
-#include <ifaddrs.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
 #include "connection.h"
 #include "list.h"
 
@@ -29,19 +23,19 @@ struct tmclient {
 struct tmserver {
 	struct tmclient *client;
 	int status;
-	const char *uuid;
+    unsigned char *uuid;
     char local_addr[16];
 	struct evhttp_uri *remote_uri;
 
 	struct evhttp_uri *appserver_ctrl;
 	struct evhttp_uri *appserver_event;
 	int is_appserver_sub;
-    const char *appserver_sid;
+    char *appserver_sid;
 
 	struct evhttp_uri *profile_ctrl;
 	struct evhttp_uri *profile_event;
 	int is_profile_sub;
-    const char *profile_sid;
+    char *profile_sid;
     struct list_head list;
 };
 
@@ -55,14 +49,12 @@ static struct app *parse_application_list(xmlNodePtr appListing, unsigned int *c
 
 static struct tmserver *check_event(struct tmclient *client, struct evhttp_request *req);
 static int get_localaddr(char *local, const char *remote);
+static int get_localport(int fd, int *port);
 static int tmclient_send_soap_action(struct tmclient *client, struct tmserver *server, int sid, const char *action, const char *body);
 
 struct tmclient *tmclient_start(struct event_base *base, ev_uint16_t port, struct connection_cb cb)
 {
 	struct evhttp_bound_socket *handle = 0;
-	struct sockaddr_storage ss;
-	evutil_socket_t fd = 0;
-	ev_socklen_t socklen = sizeof(ss);
 	struct tmclient *client = (struct tmclient *)calloc(1, sizeof(*client));
 
 	if (!client) {
@@ -82,20 +74,36 @@ struct tmclient *tmclient_start(struct event_base *base, ev_uint16_t port, struc
 		free(client);
 		return 0;
 	}
-	fd = evhttp_bound_socket_get_fd(handle);
-	if (getsockname(fd, (struct sockaddr *)&ss, &socklen)) {
-		evhttp_free(http);
-		free(client);
-		return 0;
-	}
-	if (ss.ss_family != AF_INET) {
-		evhttp_free(http);
-		free(client);
-		return 0;
-	}
-	client->port = ntohs(((struct sockaddr_in*)&ss)->sin_port);
+    if (get_localport(evhttp_bound_socket_get_fd(handle), &(client->port))) {
+        evhttp_free(http);
+        free(client);
+        return 0;
+    }
 	return client;
 }
+
+void tmclient_stop(struct tmclient *client)
+{
+    struct tmserver *server;
+    struct tmserver *tmp;
+    if (client) {
+        event_base_loopexit(client->base, NULL);
+        list_for_each_entry_safe(server, tmp, &(client->servers), list) {
+            evhttp_uri_free(server->remote_uri);
+            evhttp_uri_free(server->appserver_ctrl);
+            evhttp_uri_free(server->appserver_event);
+            evhttp_uri_free(server->profile_ctrl);
+            evhttp_uri_free(server->profile_event);
+            free(server->uuid);
+            free(server->appserver_sid);
+            free(server->profile_sid);
+            list_del(&(server->list));
+            free(server);
+        }
+        free(client);
+    }
+}
+
 
 struct tmserver *get_description(struct tmclient *client, const char *remote_uri)
 {
@@ -464,7 +472,7 @@ static int parse_device_desc(struct tmserver *server, xmlChar *data)
         xmlNodePtr udnElement = xmlFindChildElement(deviceElement, BAD_CAST"UDN");
         if (udnElement) {
             xmlChar *udn = xmlNodeGetContent(udnElement->children);
-            server->uuid = (const char *)xmlStrdup(udn);
+            server->uuid = xmlStrdup(udn);
             xmlFree(udn);
         }
         xmlNodePtr serviceListElement = xmlFindChildElement(deviceElement, BAD_CAST"serviceList");
@@ -699,6 +707,13 @@ static struct tmserver *check_event(struct tmclient *client, struct evhttp_reque
     return NULL;
 }
 
+#include <sys/types.h>
+#include <ifaddrs.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+
 static int get_localaddr(char *local, const char *remote)
 {
     struct ifaddrs *ifaddr, *ifa;
@@ -729,4 +744,19 @@ static int get_localaddr(char *local, const char *remote)
     }
     freeifaddrs(ifaddr);
     return -1;
+}
+
+static int get_localport(int fd, int *port)
+{
+    struct sockaddr_storage ss;
+    ev_socklen_t socklen = sizeof(ss);
+
+    if (getsockname(fd, (struct sockaddr *)&ss, &socklen)) {
+        return -1;
+    }
+    if (ss.ss_family != AF_INET) {
+        return -1;
+    }
+    *port = ntohs(((struct sockaddr_in*)&ss)->sin_port);
+    return 0;
 }
