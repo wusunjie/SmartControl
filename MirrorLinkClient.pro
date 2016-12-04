@@ -4,7 +4,8 @@ CONFIG -= app_bundle
 CONFIG -= qt
 
 SOURCES += main.c \
-    connection.c
+    utils.c \
+    conn.c
 
 
 unix: CONFIG += link_pkgconfig
@@ -13,5 +14,6 @@ unix: PKGCONFIG += libxml-2.0
 unix: PKGCONFIG += libusb-1.0
 
 HEADERS += \
-    connection.h \
-    list.h
+    list.h \
+    utils.h \
+    conn.h

@@ -10,7 +10,8 @@
 
 #include <string.h>
 
-#include "connection.h"
+#include "conn.h"
+#include "utils.h"
 #include "list.h"
 
 struct tmclient {
@@ -42,14 +43,11 @@ struct tmserver {
 static void tmclient_event_callback(struct evhttp_request *req, void *args);
 static void tmclient_soap_callback(struct evhttp_request *req, void *args);
 
-static xmlNodePtr xmlFindChildElement(xmlNodePtr parent, xmlChar *name);
 static int parse_device_desc(struct tmserver *server, xmlChar *data);
 static int parse_action_response(struct tmserver *server, xmlChar *data, int errcode);
 static struct app *parse_application_list(xmlNodePtr appListing, unsigned int *count);
 
 static struct tmserver *check_event(struct tmclient *client, struct evhttp_request *req);
-static int get_localaddr(char *local, const char *remote);
-static int get_localport(int fd, int *port);
 static int tmclient_send_soap_action(struct tmclient *client, struct tmserver *server, int sid, const char *action, const char *body);
 
 struct tmclient *tmclient_start(struct event_base *base, ev_uint16_t port, struct connection_cb cb)
@@ -223,6 +221,13 @@ int get_application_list(struct tmclient *client, struct tmserver *server, int p
     char body[256] = {0};
     sprintf(body, "<AppListingFilter>%s</AppListingFilter><ProfileID>%d</ProfileID>", filter, profile);
     return tmclient_send_soap_action(client, server, 0, "GetApplicationList", body);
+}
+
+int launch_application(struct tmclient *client, struct tmserver *server, int profile, unsigned int appid)
+{
+    char body[256] = {0};
+    sprintf(body, "<AppID>0x%8x</AppID><ProfileID>%d</ProfileID>", appid, profile);
+    return tmclient_send_soap_action(client, server, 0, "LaunchApplication", body);
 }
 
 static int tmclient_send_soap_action(struct tmclient *client, struct tmserver *server, int sid, const char *action, const char *body)
@@ -432,20 +437,6 @@ static void tmclient_soap_callback(struct evhttp_request *req, void *args)
 	}
 }
 
-static xmlNodePtr xmlFindChildElement(xmlNodePtr parent, xmlChar *name)
-{
-    xmlNodePtr cur = xmlFirstElementChild(parent);
-    for (; cur; cur = cur->next) {
-        if (cur->type != XML_ELEMENT_NODE) {
-            continue;
-        }
-        if (!xmlStrcmp(cur->name, name)) {
-            return cur;
-        }
-    }
-    return NULL;
-}
-
 static int parse_device_desc(struct tmserver *server, xmlChar *data)
 {
     xmlDocPtr doc;
@@ -526,16 +517,17 @@ static int parse_device_desc(struct tmserver *server, xmlChar *data)
 
 static struct app *parse_application_list(xmlNodePtr appListing, unsigned int *count)
 {
-    xmlDocPtr doc;
     xmlChar *document = xmlNodeGetContent(appListing);
+    xmlDocPtr doc = xmlParseDoc(document);
     unsigned int cnt = 0;
     struct app *appList = NULL;
-    doc = xmlParseDoc(document);
     if (!doc) {
+        xmlFree(document);
         return NULL;
     }
     xmlNodePtr rootElement = xmlDocGetRootElement(doc);
     if (!rootElement) {
+        xmlFree(document);
         xmlFreeDoc(doc);
         return NULL;
     }
@@ -550,13 +542,13 @@ static struct app *parse_application_list(xmlNodePtr appListing, unsigned int *c
                 xmlNodePtr appIDElement = xmlFindChildElement(appElement, BAD_CAST"appID");
                 if (appIDElement) {
                     xmlChar *appID = xmlNodeGetContent(appIDElement->children);
-                    appList[cnt].appID = (const char *)xmlStrdup(appID);
+                    sscanf((char *)appID, "0x%x", &(appList[cnt].appID));
                     xmlFree(appID);
                 }
                 xmlNodePtr nameElement = xmlFindChildElement(appElement, BAD_CAST"name");
                 if (nameElement) {
                     xmlChar *name = xmlNodeGetContent(nameElement->children);
-                    appList[cnt].name = (const char *)xmlStrdup(name);
+                    strncpy(appList[cnt].name, (const char *)name, 50);
                     xmlFree(name);
                 }
                 xmlNodePtr remotingInfoElement = xmlFindChildElement(appElement, BAD_CAST"remotingInfo");
@@ -577,6 +569,13 @@ static struct app *parse_application_list(xmlNodePtr appListing, unsigned int *c
                             appList[cnt].remoteinfo.protocolID = PROTOCOL_NONE;
                         }
                         xmlFree(protocolID);
+                    }
+
+                    xmlNodePtr formatElement = xmlFindChildElement(remotingInfoElement, BAD_CAST"format");
+                    if (formatElement) {
+                        xmlChar *format = xmlNodeGetContent(protocolIDElement->children);
+                        strncpy(appList[cnt].remoteinfo.format, (const char *)format, 50);
+                        xmlFree(format);
                     }
                 }
                 cnt++;
@@ -635,7 +634,10 @@ static int parse_action_response(struct tmserver *server, xmlChar *data, int err
                             }
                         }
                         else if (!xmlStrcmp(actionName, BAD_CAST"LaunchApplication")) {
-
+                            xmlChar *suri = xmlNodeGetContent(actionRspElement);
+                            struct evhttp_uri *uri = evhttp_uri_parse((const char *)suri);
+                            evhttp_uri_free(uri);
+                            xmlFree(suri);
                         }
                     }
                     else if (!xmlStrcmp(serviceType, BAD_CAST"urn:schemas-upnp-org:service:TmClientProfile:1")) {
@@ -705,58 +707,4 @@ static struct tmserver *check_event(struct tmclient *client, struct evhttp_reque
         }
     }
     return NULL;
-}
-
-#include <sys/types.h>
-#include <ifaddrs.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-
-static int get_localaddr(char *local, const char *remote)
-{
-    struct ifaddrs *ifaddr, *ifa;
-    struct in_addr addr;
-    memset(&addr, 0, sizeof(addr));
-    if (!inet_aton(remote, &addr)) {
-        return -1;
-    }
-    if (-1 == getifaddrs(&ifaddr)) {
-        return -1;
-    }
-    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (NULL == ifa->ifa_addr) {
-            continue;
-        }
-        if (AF_INET != ifa->ifa_addr->sa_family) {
-            continue;
-        }
-        if (!ifa->ifa_netmask) {
-            continue;
-        }
-        if (((((struct sockaddr_in *)(ifa->ifa_addr))->sin_addr.s_addr) & (((struct sockaddr_in *)(ifa->ifa_netmask))->sin_addr.s_addr)) ==
-        (addr.s_addr & (((struct sockaddr_in *)(ifa->ifa_netmask))->sin_addr.s_addr))) {
-            strcpy(local, inet_ntoa(((struct sockaddr_in *)(ifa->ifa_addr))->sin_addr));
-            freeifaddrs(ifaddr);
-            return 0;
-        }
-    }
-    freeifaddrs(ifaddr);
-    return -1;
-}
-
-static int get_localport(int fd, int *port)
-{
-    struct sockaddr_storage ss;
-    ev_socklen_t socklen = sizeof(ss);
-
-    if (getsockname(fd, (struct sockaddr *)&ss, &socklen)) {
-        return -1;
-    }
-    if (ss.ss_family != AF_INET) {
-        return -1;
-    }
-    *port = ntohs(((struct sockaddr_in*)&ss)->sin_port);
-    return 0;
 }

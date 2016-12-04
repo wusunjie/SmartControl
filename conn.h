@@ -1,5 +1,5 @@
-#ifndef CONNECTION_H
-#define CONNECTION_H
+#ifndef CONN_H
+#define CONN_H
 
 struct tmclient;
 struct tmserver;
@@ -59,8 +59,8 @@ struct audio_info {
 };
 
 struct app {
-    const char *appID;
-    const char *name;
+    unsigned int appID;
+    char name[50];
     struct remoting_info remoteinfo;
     struct app_info appinfo;
     struct audio_info audioinfo;
@@ -73,14 +73,18 @@ struct connection_cb {
 };
 
 extern struct tmclient *tmclient_start(struct event_base *base, ev_uint16_t port, struct connection_cb cb);
+
 extern void tmclient_stop(struct tmclient *client);
 
 extern struct tmserver *get_description(struct tmclient *client, const char *remote_uri);
+
 extern int subscribe_service(struct tmclient *client, struct tmserver *server, int sid);
 
 extern void disconnect_server(struct tmclient *client, struct tmserver *server);
 
 extern int get_application_list(struct tmclient *client, struct tmserver *server, int profile, const char *filter);
 
-#endif // CONNECTION_H
+extern int launch_application(struct tmclient *client, struct tmserver *server, int profile, unsigned int appid);
+
+#endif // CONN_H
 
