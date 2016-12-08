@@ -19,3 +19,5 @@ HEADERS += \
     utils.h \
     conn.h \
     dapclient.h
+
+unix: PKGCONFIG += libcrypto

@@ -7,17 +7,19 @@
 #include <event2/buffer.h>
 
 #include <string.h>
+#include <stdlib.h>
 
 #include "dapclient.h"
+#include "utils.h"
 
-const char *dapclient_rq_msg = "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>"
+static const char *daprq_msg_format = "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>"
         "<attestationRequest>"
         "<version>"
         "<majorVersion>1</majorVersion>"
         "<minorVersion>2</minorVersion>"
         "</version>"
         "<trustRoot>4L4k+5F5wyBbYmR4z/k55ZY+jJq+5m41zcOuKmO/IlY=</trustRoot>"
-        "<nonce>4L4k+5F5wyBbYmR4z/k55ZY+jJq+5m41zcOuKmO/IlY=</nonce>"
+        "<nonce>%s</nonce>"
         "<componentID>*</componentID>"
         "</attestationRequest>";
 
@@ -26,6 +28,9 @@ static void dapclient_data_cb(struct bufferevent *bev, void *ctx);
 
 int dapclient_request(struct event_base *base, struct evhttp_uri *uri)
 {
+    unsigned char *buf = NULL;
+    char msg[1024] = {0};
+    unsigned int size = 0;
     struct sockaddr_in sin;
     evutil_socket_t fd;
     struct bufferevent *conn;
@@ -51,7 +56,12 @@ int dapclient_request(struct event_base *base, struct evhttp_uri *uri)
         bufferevent_free(conn);
         return -1;
     }
-    bufferevent_write(conn, dapclient_rq_msg, strlen(dapclient_rq_msg));
+    if (-1 == get_certificate_nonce(&buf, &size)) {
+        return -1;
+    }
+    snprintf(msg, 1024, daprq_msg_format, buf);
+    bufferevent_write(conn, msg, strlen(msg));
+    free(buf);
     return 0;
 }
 

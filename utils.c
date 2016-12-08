@@ -7,6 +7,11 @@
 #include <string.h>
 #include <event2/http.h>
 
+#include <time.h>
+#include <stdint.h>
+#include <openssl/rand.h>
+#include <openssl/evp.h>
+
 #include "utils.h"
 
 xmlNodePtr xmlFindChildElement(xmlNodePtr parent, xmlChar *name)
@@ -67,5 +72,33 @@ int get_localport(int fd, int *port)
         return -1;
     }
     *port = ntohs(((struct sockaddr_in*)&ss)->sin_port);
+    return 0;
+}
+
+int get_certificate_nonce(unsigned char **buf, unsigned int *size)
+{
+    uint64_t t;
+    struct timespec ts;
+    unsigned char tmp[100] = {0};
+    unsigned char *result = NULL;
+    if (0 != clock_gettime(CLOCK_MONOTONIC, &ts)) {
+        return -1;
+    }
+    t = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+    snprintf((char *)tmp, 100, "%lu", t);
+    RAND_seed(tmp, 100);
+    if (!RAND_bytes(tmp, 20)) {
+        return -1;
+    }
+    *size = ((20 + 2) / 3) << 2;
+    result = (unsigned char *)calloc(1, *size + 1);
+    if (!result) {
+        return -1;
+    }
+    if (!EVP_EncodeBlock(result, tmp, 20)) {
+        free(result);
+        return -1;
+    }
+    *buf = result;
     return 0;
 }
