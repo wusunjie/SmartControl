@@ -67,6 +67,8 @@ int dapclient_request(struct event_base *base, struct evhttp_uri *uri)
 
 static void dapclient_event_cb(struct bufferevent *bev, short what, void *ctx)
 {
+    (void)bev;
+    (void)ctx;
     switch (what) {
         case BEV_EVENT_READING:
         break;
@@ -87,6 +89,7 @@ static void dapclient_event_cb(struct bufferevent *bev, short what, void *ctx)
 
 static void dapclient_data_cb(struct bufferevent *bev, void *ctx)
 {
+    (void)ctx;
     short event = bufferevent_get_enabled(bev);
     if (EV_READ & event) {
         struct evbuffer *input = bufferevent_get_input(bev);

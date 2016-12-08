@@ -23,7 +23,7 @@ int main(void)
     };
     global_base = event_base_new();
     struct tmclient *client = tmclient_start(global_base, 1900, cb);
-    get_description(client, "http://192.168.42.129:43649/upnp/dev/b7c06478-06db-208c-0000-0000741ab1e1/desc");
+    get_description(client, "http://192.168.42.129:46017/upnp/dev/b7c06478-06db-208c-0000-0000741ab1e1/desc");
     return event_base_loop(global_base, 0);
 }
 
@@ -60,5 +60,8 @@ static void test_applist_update(struct tmclient *client, struct tmserver *server
 
 static void test_application_launched(struct tmclient *client, struct tmserver *server, struct evhttp_uri *uri, int result)
 {
+    (void)client;
+    (void)server;
+    (void)result;
     dapclient_request(global_base, uri);
 }
