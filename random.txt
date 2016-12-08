@@ -1,0 +1,9 @@
+<attestationRequest>
+<version>
+<majorVersion>1</majorVersion>
+<minorVersion>2</minorVersion>
+</version>
+<trustRoot>4L4k+5F5wyBbYmR4z/k55ZY+jJq+5m41zcOuKmO/IlY=</trustRoot>
+<nonce>4L4k+5F5wyBbYmR4z/k55ZY+jJq+5m41zcOuKmO/IlY=</nonce>
+<componentID>*</componentID>
+</attestationRequest>

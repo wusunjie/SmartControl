@@ -1,6 +1,8 @@
 #ifndef CONN_H
 #define CONN_H
 
+#include <event2/http.h>
+
 struct tmclient;
 struct tmserver;
 
@@ -70,6 +72,7 @@ struct connection_cb {
     void (*server_added)(struct tmclient *client, struct tmserver *server);
     void (*server_removed)(struct tmclient *client, struct tmserver *server);
     void (*applist_update)(struct tmclient *client, struct tmserver *server, struct app *apps, unsigned int count);
+    void (*application_launched)(struct tmclient *client, struct tmserver *server, struct evhttp_uri *uri, int result);
 };
 
 extern struct tmclient *tmclient_start(struct event_base *base, ev_uint16_t port, struct connection_cb cb);

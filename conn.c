@@ -636,6 +636,9 @@ static int parse_action_response(struct tmserver *server, xmlChar *data, int err
                         else if (!xmlStrcmp(actionName, BAD_CAST"LaunchApplication")) {
                             xmlChar *suri = xmlNodeGetContent(actionRspElement);
                             struct evhttp_uri *uri = evhttp_uri_parse((const char *)suri);
+                            if (server->client && server->client->cb.application_launched) {
+                                server->client->cb.application_launched(server->client, server, uri, 0);
+                            }
                             evhttp_uri_free(uri);
                             xmlFree(suri);
                         }

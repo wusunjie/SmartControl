@@ -5,7 +5,8 @@ CONFIG -= qt
 
 SOURCES += main.c \
     utils.c \
-    conn.c
+    conn.c \
+    dapclient.c
 
 
 unix: CONFIG += link_pkgconfig
@@ -16,4 +17,5 @@ unix: PKGCONFIG += libusb-1.0
 HEADERS += \
     list.h \
     utils.h \
-    conn.h
+    conn.h \
+    dapclient.h

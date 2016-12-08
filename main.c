@@ -4,22 +4,27 @@
 #include <stdio.h>
 
 #include "conn.h"
+#include "dapclient.h"
+
+struct event_base *global_base = NULL;
 
 static void test_server_added(struct tmclient *client, struct tmserver *server);
 static void test_server_removed(struct tmclient *client, struct tmserver *server);
 static void test_applist_update(struct tmclient *client, struct tmserver *server, struct app *apps, unsigned int count);
+static void test_application_launched(struct tmclient *client, struct tmserver *server, struct evhttp_uri *uri, int result);
 
 int main(void)
 {
     struct connection_cb cb = {
         test_server_added,
         test_server_removed,
-        test_applist_update
+        test_applist_update,
+        test_application_launched
     };
-    struct event_base *base = event_base_new();
-    struct tmclient *client = tmclient_start(base, 1900, cb);
-    get_description(client, "http://192.168.42.129:60237/upnp/dev/b7c06478-06db-208c-0000-0000741ab1e1/desc");
-    return event_base_loop(base, 0);
+    global_base = event_base_new();
+    struct tmclient *client = tmclient_start(global_base, 1900, cb);
+    get_description(client, "http://192.168.42.129:37797/upnp/dev/b7c06478-06db-208c-0000-0000741ab1e1/desc");
+    return event_base_loop(global_base, 0);
 }
 
 static void test_server_added(struct tmclient *client, struct tmserver *server)
@@ -51,4 +56,9 @@ static void test_applist_update(struct tmclient *client, struct tmserver *server
         }
         launch_application(client, server, 0, apps[cur].appID);
     }
+}
+
+static void test_application_launched(struct tmclient *client, struct tmserver *server, struct evhttp_uri *uri, int result)
+{
+    dapclient_request(global_base, uri);
 }
