@@ -6,7 +6,8 @@ CONFIG -= qt
 SOURCES += main.c \
     utils.c \
     conn.c \
-    dapclient.c
+    dapclient.c \
+    sigverify.c
 
 
 unix: CONFIG += link_pkgconfig
@@ -18,4 +19,5 @@ HEADERS += \
     list.h \
     utils.h \
     conn.h \
-    dapclient.h
+    dapclient.h \
+    sigverify.h

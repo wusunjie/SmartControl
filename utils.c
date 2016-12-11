@@ -102,3 +102,38 @@ int get_certificate_nonce(unsigned char **buf, unsigned int *size)
     *buf = result;
     return 0;
 }
+
+int base64_decode(const unsigned char *encoded, unsigned int len, struct decode_buffer *buffer)
+{
+    unsigned char *buf = (unsigned char *)malloc(len + 1);
+    int l;
+    if (!buf) {
+        return -1;
+    }
+    l = EVP_DecodeBlock(buf, encoded, len);
+    if (-1 == l) {
+        free(buf);
+        return -1;
+    }
+    buffer->len = l - 1;
+    buffer->data = buf;
+    return 0;
+}
+
+void decode_buffer_init(struct decode_buffer *buffer)
+{
+    buffer->data = NULL;
+    buffer->len = 0;
+}
+
+void decode_buffer_clear(struct decode_buffer *buffer)
+{
+    free(buffer->data);
+    buffer->len = 0;
+}
+
+void decode_buffer_append(struct decode_buffer *buffer, unsigned long len)
+{
+    buffer->data = (unsigned char *)malloc(len);
+    buffer->len = len;
+}

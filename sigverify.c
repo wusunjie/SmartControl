@@ -1,95 +1,273 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <string.h>
-
-#include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <libxml/parser.h>
+#include <libxml/c14n.h>
 #include <openssl/evp.h>
-#include <openssl/bio.h>
-#include <openssl/buffer.h>
 #include <openssl/x509.h>
 
-static const char *pubkey = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzZOYAJEwa/ODoV9QtDg+1F5uzlH6KHidPYRXu+6dHPmk8iHmx5AbeMwEAOtoutse2OOQ+UkI51dsFhicNOLBwu1EIHDmbtQKDNzRIYuNnhqUAypBxQeFQklzxVAxRjf1ij77pSp5VVQGPCWWqWdohZYsfnVL5hIRiI39xf/hzY56f3RO8j+/BlnvVoCq9q4Re+MytQZbSC3OxO70Z3CK4zNF/GFVv9uWxMid86XYvqcJJlbjqRZkenigo447Lr4e49d2/3Qzkj54mybMyJniT6jDiHnfet+VlKs/Cc2YQy0IfStRB/voK20u2kX6nYGNAVaXV/6HOb0yzPwDyoL5tQIDAQAB";
-static const char *applist = "<appList xml:id=\"mlServerAppList\"><app><appID>0x80000000</appID><name>DAPServer</name><allowedProfileIDs>0</allowedProfileIDs><remotingInfo><protocolID>DAP</protocolID><direction>bi</direction></remotingInfo><appInfo><appCategory>0xF0000001</appCategory></appInfo></app><Signature xmlns=\"http://www.w3.org/2000/09/xmldsig#\"><SignedInfo xmlns=\"http://www.w3.org/2000/09/xmldsig#\"><CanonicalizationMethod Algorithm=\"http://www.w3.org/2006/12/xml-c14n11\"></CanonicalizationMethod><SignatureMethod Algorithm=\"http://www.w3.org/2000/09/xmldsig#rsa-sha1\"></SignatureMethod><Reference URI=\"#mlServerAppList\"><Transforms><Transform Algorithm=\"http://www.w3.org/2000/09/xmldsig#enveloped-signature\"></Transform><Transform Algorithm=\"http://www.w3.org/2006/12/xml-c14n11\"></Transform></Transforms><DigestMethod Algorithm=\"http://www.w3.org/2000/09/xmldsig#sha1\"></DigestMethod><DigestValue>8FLxBkpA/v0BVQsdqCMmHtcMfmQ=</DigestValue></Reference></SignedInfo><SignatureValue>mxWcCnXeYNQN1rh68G3H0aq9XCseCHF3Pv5OEqGQs3PaQPYw1mq/ggSrAY/57md0b4TVQKlAOvkriEEfrLjzzIa5gF9F+K8DFTIysft1OvIv2OgtqTosy1sP15Oc1BSUhifOYE3opDx1XTgsNFVg+Tkgyza1vW97tTH0Hz8SQICoSPmLH43S9x4jSoOGuL5uUnK9y/xuSaTB+Capfl/Dlj+6mCGJcaL7ZBDRzD48aZrW0KIbL6hlaSpWDmLIElZfer4uWiEP5lqzrgThsag8gbarDDd2RsNwa+fLPANfBH3cDkeFDT50LUSv4Rv1vP+Nv1DPbS7EtjZ3C7235vJL3w==</SignatureValue></Signature></appList>";
+#include <string.h>
 
-void base64_decode(const char *in, size_t ilen, uint8_t **out, size_t *olen)
+#include "utils.h"
+
+struct sigverify_ctx {
+    xmlDocPtr doc;
+    const EVP_MD *digest;
+    EVP_PKEY *pkey;
+    EVP_MD_CTX *digestCtx;
+    int canonicalMode;
+    xmlNodePtr canonicalNode;
+    xmlNodePtr sigNode;
+    xmlNodePtr sigInfoNode;
+    xmlNodePtr sigValueNode;
+    int status;
+    struct decode_buffer dgst;
+    struct decode_buffer buffer;
+};
+
+static int SigVerifyXMLOutputWriteCallback(void * context, const char * buffer, int len);
+static int SigVerifyXMLOutputCloseCallback(void * context);
+static int SigVerifyXMLC14NIsVisibleCallback(void* user_data, xmlNodePtr node, xmlNodePtr parent);
+
+static int sigverify_prepare(struct sigverify_ctx *ctx, const unsigned char *data, const unsigned char *pubkey);
+static int digest_verify(struct sigverify_ctx *ctx);
+static int signature_verify(struct sigverify_ctx *ctx);
+static void sigverify_clear(struct sigverify_ctx *ctx);
+
+
+
+int sigverify(const unsigned char *data, const unsigned char *pubkey)
 {
-	BIO *buff, *b64f;
-	b64f = BIO_new(BIO_f_base64());
-	buff = BIO_new_mem_buf((void *)in, ilen);
-	buff = BIO_push(b64f, buff);
-	*out = (uint8_t *)malloc(ilen * sizeof(uint8_t));
-	BIO_set_flags(buff, BIO_FLAGS_BASE64_NO_NL);
-	BIO_set_close(buff, BIO_CLOSE);
-	*olen = BIO_read(buff, *out, ilen);
-	*out = (uint8_t *)realloc((void *)(*out), (*olen + 1) * sizeof(uint8_t));
-	(*out)[*olen] = '\0';
-	BIO_free_all(buff);
+    struct sigverify_ctx ctx;
+    int ret = -1;
+    decode_buffer_init(&(ctx.buffer));
+    decode_buffer_init(&(ctx.dgst));
+    ret = sigverify_prepare(&ctx, data, pubkey);
+    if (ret) {
+        return ret;
+    }
+    if (-1 == digest_verify(&ctx)) {
+        sigverify_clear(&ctx);
+        return -1;
+    }
+    if (-1 == signature_verify(&ctx)) {
+        sigverify_clear(&ctx);
+        return -1;
+    }
+    return 0;
 }
 
-xmlNodePtr xmlFindChildElement(xmlNodePtr parent, xmlChar *name)
+static int sigverify_prepare(struct sigverify_ctx *ctx, const unsigned char *data, const unsigned char *pubkey)
 {
-    xmlNodePtr cur = xmlFirstElementChild(parent);
-    for (; cur; cur = cur->next) {
-        if (cur->type != XML_ELEMENT_NODE) {
-            continue;
+    xmlDocPtr doc = xmlParseDoc(BAD_CAST data);
+    if (!doc) {
+        return -1;
+    }
+    xmlNodePtr rootElement = xmlDocGetRootElement(doc);
+    if (!rootElement) {
+        xmlFreeDoc(doc);
+        return -1;
+    }
+    xmlNodePtr sigElement = xmlFindChildElement(rootElement, BAD_CAST"Signature");
+    if (!sigElement) {
+        xmlFreeDoc(doc);
+        return 1;
+    }
+    xmlNodePtr sigInfoElement = xmlFindChildElement(sigElement, BAD_CAST"SignedInfo");
+    if (!sigInfoElement) {
+        xmlFreeDoc(doc);
+        return -1;
+    }
+    xmlNodePtr referenceElement = xmlFindChildElement(sigInfoElement, BAD_CAST"Reference");
+    if (!referenceElement) {
+        xmlFreeDoc(doc);
+        return -1;
+    }
+    xmlNodePtr digestValueElement = xmlFindChildElement(referenceElement, BAD_CAST"DigestValue");
+    if (!digestValueElement) {
+        xmlFreeDoc(doc);
+        return -1;
+    }
+    xmlNodePtr sigValueElement = xmlFindChildElement(sigElement, BAD_CAST"SignatureValue");
+    if (!sigValueElement) {
+        xmlFreeDoc(doc);
+        return -1;
+    }
+    xmlChar *digestValue = xmlNodeGetContent(digestValueElement);
+    if (digestValue) {
+        if (-1 == base64_decode(digestValue, xmlStrlen(digestValue), &(ctx->buffer))) {
+            xmlFreeDoc(doc);
+            xmlFree(digestValue);
+            return -1;
         }
-        if (!xmlStrcmp(cur->name, name)) {
-            return cur;
+        xmlFree(digestValue);
+    }
+    struct decode_buffer buffer;
+    decode_buffer_init(&buffer);
+    if (-1 == base64_decode(pubkey, strlen((const char *)pubkey), &buffer)) {
+        xmlFreeDoc(doc);
+        xmlFree(digestValue);
+        return -1;
+    }
+    ctx->pkey = NULL;
+    ctx->pkey = d2i_PUBKEY(&(ctx->pkey), (const unsigned char **)&(buffer.data), buffer.len);
+    ctx->doc = doc;
+    ctx->sigNode = sigElement;
+    ctx->sigInfoNode = sigInfoElement;
+    ctx->sigValueNode = sigValueElement;
+    return 0;
+}
+
+static void sigverify_clear(struct sigverify_ctx *ctx)
+{
+    xmlFreeDoc(ctx->doc);
+    EVP_PKEY_free(ctx->pkey);
+    EVP_MD_CTX_destroy(ctx->digestCtx);
+}
+
+static int digest_verify(struct sigverify_ctx *ctx)
+{
+    xmlOutputBufferPtr buffer;
+    ctx->status = 0;
+    ctx->canonicalMode = 0;
+    ctx->canonicalNode = ctx->sigNode;
+    decode_buffer_append(&(ctx->dgst), 64);
+    buffer = xmlOutputBufferCreateIO(SigVerifyXMLOutputWriteCallback, SigVerifyXMLOutputCloseCallback, ctx, NULL);
+    xmlC14NExecute(ctx->doc, SigVerifyXMLC14NIsVisibleCallback, ctx, XML_C14N_1_1, NULL, 0, buffer);
+    xmlOutputBufferClose(buffer);
+    if (ctx->dgst.len != ctx->buffer.len) {
+        return -1;
+    }
+    if (memcmp(ctx->buffer.data, ctx->dgst.data, ctx->dgst.len)) {
+        return -1;
+    }
+    decode_buffer_clear(&(ctx->dgst));
+    decode_buffer_clear(&(ctx->buffer));
+    return 0;
+}
+
+static int signature_verify(struct sigverify_ctx *ctx)
+{
+    xmlOutputBufferPtr buffer;
+    int ret = 0;
+    xmlChar *sigValue = xmlNodeGetContent(ctx->sigValueNode);
+    if (sigValue) {
+        if (-1 == base64_decode(sigValue, xmlStrlen(sigValue), &(ctx->dgst))) {
+            xmlFree(sigValue);
+            return -1;
+        }
+        xmlFree(sigValue);
+    }
+    ctx->status = 3;
+    ctx->canonicalMode = 1;
+    ctx->canonicalNode = ctx->sigInfoNode;
+    buffer = xmlOutputBufferCreateIO(SigVerifyXMLOutputWriteCallback, SigVerifyXMLOutputCloseCallback, ctx, NULL);
+    xmlC14NExecute(ctx->doc, SigVerifyXMLC14NIsVisibleCallback, ctx, XML_C14N_1_1, NULL, 0, buffer);
+    ret = xmlOutputBufferClose(buffer);
+    decode_buffer_clear(&(ctx->dgst));
+    return ret;
+}
+
+static int SigVerifyXMLOutputWriteCallback(void * context, const char * buffer, int len)
+{
+    struct sigverify_ctx *ctx = (struct sigverify_ctx *)context;
+    if (ctx) {
+        switch (ctx->status) {
+            case 0:
+            {
+                ctx->digestCtx = EVP_MD_CTX_create();
+                ctx->digest = EVP_get_digestbyname((const char *)"SHA1");
+                EVP_DigestInit(ctx->digestCtx, ctx->digest);
+                EVP_DigestUpdate(ctx->digestCtx, buffer, len);
+                ctx->status = 1;
+                return len;
+            }
+            break;
+            case 1:
+            {
+                ctx->status = 2;
+            }
+            break;
+            case 3:
+            {
+                EVP_VerifyInit(ctx->digestCtx, ctx->digest);
+                EVP_VerifyUpdate(ctx->digestCtx, buffer, len);
+                ctx->status = 4;
+                return len;
+            }
+            break;
+            default:
+            break;
         }
     }
-    return NULL;
+    return 0;
 }
 
-int get_signature_value(const char *list, char **out)
+static int SigVerifyXMLOutputCloseCallback(void * context)
 {
-	xmlDocPtr doc = xmlParseDoc(list);
-	if (!doc) {
-		return -1;
-	}
-	xmlNodePtr rootElement = xmlDocGetRootElement(doc);
-	if (!rootElement) {
-		xmlFreeDoc(doc);
-		return -1;
-	}
-	xmlNodePtr signatureElement = xmlFindChildElement(rootElement, "Signature");
-	if (!signatureElement) {
-		xmlFreeDoc(doc);
-		return -1;
-	}
-	xmlNodePtr signatureValueElement = xmlFindChildElement(signatureElement, "SignatureValue");
-	if (!signatureValueElement) {
-		xmlFreeDoc(doc);
-	}
-	xmlChar *ret = xmlNodeGetContent(signatureValueElement);
-	if (ret) {
-		*out = xmlStrdup(ret);
-		xmlFree(ret);
-		xmlFreeDoc(doc);
-		return 0;
-	}
-	xmlFreeDoc(doc);
-	return -1;
+    struct sigverify_ctx *ctx = (struct sigverify_ctx *)context;
+    if (ctx) {
+        switch (ctx->status) {
+            case 2:
+            {
+                EVP_DigestFinal(ctx->digestCtx, ctx->dgst.data, (unsigned int *)&(ctx->dgst.len));
+            }
+            break;
+            case 4:
+            {
+                if (1 == EVP_VerifyFinal(ctx->digestCtx, ctx->dgst.data, ctx->dgst.len, ctx->pkey)) {
+                    return 0;
+                }
+                else {
+                    return -1;
+                }
+            }
+            break;
+            default:
+            break;
+        }
+    }
+    return 0;
 }
 
-int main(int argc, char *argv[])
+static int SigVerifyXMLC14NIsVisibleCallback(void *user_data, xmlNodePtr node, xmlNodePtr parent)
 {
-	uint8_t *keyout = NULL;
-	size_t keylen = 0;
-	char *sigvalue = NULL;
-	uint8_t *sigout = NULL;
-	size_t siglen = 0;
-	EVP_PKEY *pKey = NULL;
-	base64_decode(pubkey, strlen(pubkey), &keyout, &keylen);
-	if (get_signature_value(applist, &sigvalue)) {
-		free(keyout);
-		printf("get signature value failed\n");
-		return -1;
-	}
-	base64_decode(sigvalue, strlen(sigvalue), &sigout, &siglen);
-	pKey = d2i_PUBKEY(&pKey, (const uint8_t **)&keyout, keylen);
-	EVP_PKEY_free(pKey);
-	free(sigvalue);
-	free(sigout);
-	return 0;
+    struct sigverify_ctx *ctx = (struct sigverify_ctx *)user_data;
+    if (ctx) {
+        switch (ctx->canonicalMode) {
+            case 0:
+            {
+                if (node == ctx->canonicalNode) {
+                    return 0;
+                }
+                else {
+                    for (xmlNodePtr cur = parent; cur != NULL; cur = cur->parent) {
+                        if (cur == ctx->canonicalNode) {
+                            return 0;
+                        }
+                    }
+                }
+                return 1;
+            }
+            break;
+            case 1:
+            {
+                if (node == ctx->canonicalNode) {
+                    return 1;
+                }
+                else {
+                    for (xmlNodePtr cur = parent; cur != NULL; cur = cur->parent) {
+                        if (cur == ctx->canonicalNode) {
+                            return 1;
+                        }
+                    }
+                }
+                return 0;
+            }
+            break;
+            default:
+            break;
+        }
+    }
+    return 1;
 }
+
+
