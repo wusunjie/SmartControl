@@ -37,12 +37,10 @@ static void sigverify_clear(struct sigverify_ctx *ctx);
 int sigverify(const unsigned char *data, const unsigned char *pubkey)
 {
     struct sigverify_ctx ctx;
-    int ret = -1;
     decode_buffer_init(&(ctx.buffer));
     decode_buffer_init(&(ctx.dgst));
-    ret = sigverify_prepare(&ctx, data, pubkey);
-    if (ret) {
-        return ret;
+    if (-1 == sigverify_prepare(&ctx, data, pubkey)) {
+        return -1;
     }
     if (-1 == digest_verify(&ctx)) {
         sigverify_clear(&ctx);
@@ -69,7 +67,7 @@ static int sigverify_prepare(struct sigverify_ctx *ctx, const unsigned char *dat
     xmlNodePtr sigElement = xmlFindChildElement(rootElement, BAD_CAST"Signature");
     if (!sigElement) {
         xmlFreeDoc(doc);
-        return 1;
+        return -1;
     }
     xmlNodePtr sigInfoElement = xmlFindChildElement(sigElement, BAD_CAST"SignedInfo");
     if (!sigInfoElement) {
@@ -101,14 +99,15 @@ static int sigverify_prepare(struct sigverify_ctx *ctx, const unsigned char *dat
         xmlFree(digestValue);
     }
     struct decode_buffer buffer;
-    decode_buffer_init(&buffer);
     if (-1 == base64_decode(pubkey, strlen((const char *)pubkey), &buffer)) {
         xmlFreeDoc(doc);
-        xmlFree(digestValue);
         return -1;
     }
-    ctx->pkey = NULL;
-    ctx->pkey = d2i_PUBKEY(&(ctx->pkey), (const unsigned char **)&(buffer.data), buffer.len);
+    ctx->pkey = d2i_PUBKEY(NULL, (const unsigned char **)&(buffer.data), buffer.len);
+    if (!ctx->pkey) {
+        xmlFreeDoc(doc);
+        return -1;
+    }
     ctx->doc = doc;
     ctx->sigNode = sigElement;
     ctx->sigInfoNode = sigInfoElement;
@@ -213,7 +212,8 @@ static int SigVerifyXMLOutputCloseCallback(void * context)
             break;
             case 4:
             {
-                if (1 == EVP_VerifyFinal(ctx->digestCtx, ctx->dgst.data, ctx->dgst.len, ctx->pkey)) {
+                int ret = EVP_VerifyFinal(ctx->digestCtx, ctx->dgst.data, ctx->dgst.len, ctx->pkey);
+                if (1 == ret) {
                     return 0;
                 }
                 else {

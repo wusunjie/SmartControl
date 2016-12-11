@@ -110,12 +110,18 @@ int base64_decode(const unsigned char *encoded, unsigned int len, struct decode_
     if (!buf) {
         return -1;
     }
+    if (encoded[len - 1] == '\0') {
+        len--;
+    }
     l = EVP_DecodeBlock(buf, encoded, len);
     if (-1 == l) {
         free(buf);
         return -1;
     }
-    buffer->len = l - 1;
+    while ('=' == encoded[--len]) {
+        l--;
+    }
+    buffer->len = l;
     buffer->data = buf;
     return 0;
 }

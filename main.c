@@ -23,7 +23,7 @@ int main(void)
     };
     global_base = event_base_new();
     struct tmclient *client = tmclient_start(global_base, 1900, cb);
-    get_description(client, "http://192.168.42.129:42100/upnp/dev/b7c06478-06db-208c-0000-0000741ab1e1/desc");
+    get_description(client, "http://192.168.42.129:44931/upnp/dev/b7c06478-06db-208c-0000-0000741ab1e1/desc");
     return event_base_loop(global_base, 0);
 }
 
