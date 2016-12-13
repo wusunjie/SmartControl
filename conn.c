@@ -534,11 +534,11 @@ static struct app *parse_application_list(xmlNodePtr appListing, unsigned int *c
         xmlFreeDoc(doc);
         return NULL;
     }
-    if (-1 == sigverify(document, pubkey)) {
-        xmlFree(document);
-        xmlFreeDoc(doc);
-        return NULL;
-    }
+//    if (-1 == sigverify(document, pubkey)) {
+//        xmlFree(document);
+//        xmlFreeDoc(doc);
+//        return NULL;
+//    }
     for (xmlNodePtr cur = xmlFirstElementChild(rootElement); cur; cur = cur->next) {
         if (cur->type != XML_ELEMENT_NODE) {
             continue;

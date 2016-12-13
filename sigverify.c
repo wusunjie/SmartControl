@@ -3,6 +3,7 @@
 #include <libxml/c14n.h>
 #include <openssl/evp.h>
 #include <openssl/x509.h>
+#include <openssl/err.h>
 
 #include <string.h>
 
@@ -37,6 +38,7 @@ static void sigverify_clear(struct sigverify_ctx *ctx);
 int sigverify(const unsigned char *data, const unsigned char *pubkey)
 {
     struct sigverify_ctx ctx;
+    ERR_load_crypto_strings();
     decode_buffer_init(&(ctx.buffer));
     decode_buffer_init(&(ctx.dgst));
     if (-1 == sigverify_prepare(&ctx, data, pubkey)) {
@@ -173,7 +175,7 @@ static int SigVerifyXMLOutputWriteCallback(void * context, const char * buffer, 
             case 0:
             {
                 ctx->digestCtx = EVP_MD_CTX_create();
-                ctx->digest = EVP_get_digestbyname((const char *)"SHA1");
+                ctx->digest = EVP_sha1();
                 EVP_DigestInit(ctx->digestCtx, ctx->digest);
                 EVP_DigestUpdate(ctx->digestCtx, buffer, len);
                 ctx->status = 1;
@@ -187,6 +189,8 @@ static int SigVerifyXMLOutputWriteCallback(void * context, const char * buffer, 
             break;
             case 3:
             {
+                EVP_MD_CTX_destroy(ctx->digestCtx);
+                ctx->digestCtx = EVP_MD_CTX_create();
                 EVP_VerifyInit(ctx->digestCtx, ctx->digest);
                 EVP_VerifyUpdate(ctx->digestCtx, buffer, len);
                 ctx->status = 4;
@@ -217,6 +221,14 @@ static int SigVerifyXMLOutputCloseCallback(void * context)
                     return 0;
                 }
                 else {
+                    int err;
+                    do {
+                        err = ERR_get_error();
+                        if (err) {
+                            printf("error is %s\n", ERR_error_string(err, NULL));
+                            fflush(stdout);
+                        }
+                    } while (err != 0);
                     return -1;
                 }
             }
