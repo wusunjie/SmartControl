@@ -14,6 +14,8 @@
 
 #include "utils.h"
 
+#define BSIZE   (8*1024)
+
 xmlNodePtr xmlFindChildElement(xmlNodePtr parent, xmlChar *name)
 {
     xmlNodePtr cur = xmlFirstElementChild(parent);
@@ -105,40 +107,27 @@ int get_certificate_nonce(unsigned char **buf, unsigned int *size)
 
 int base64_decode(const unsigned char *encoded, unsigned int len, struct decode_buffer *buffer)
 {
-//    BIO *b64, *bmem;
-//    unsigned char *buf = (unsigned char *)malloc(len);
-//    int l;
-//    if (!buf) {
-//        return -1;
-//    }
-//    b64 = BIO_new(BIO_f_base64());
-//    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
-//    bmem = BIO_new_mem_buf(encoded,len);
-//    bmem = BIO_push(b64,bmem);
-//    l = BIO_read(bmem, buf, len);
-//    buf[l] = 0;
-//    buffer->len = l - 1;
-//    buffer->data = buf;
-//    BIO_free_all(bmem);
-//    return 0;
-    unsigned char *buf = (unsigned char *)malloc(len + 1);
-    int l;
-    if (!buf) {
+    BIO *b64, *rbio;
+    int inl = 0;
+    unsigned char *buff = (unsigned char *)malloc(BSIZE);
+    if ((b64 = BIO_new(BIO_f_base64())) == NULL)
         return -1;
+    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+    rbio = BIO_new_mem_buf((void *)encoded, len);
+    rbio = BIO_push(b64, rbio);
+
+    for (;;) {
+        int ret = BIO_read(rbio, (char *)buff + inl, BSIZE);
+        if (ret <= 0) {
+            buffer->data = buff;
+            buffer->len = inl;
+            break;
+        }
+        else {
+            inl += ret;
+        }
     }
-    if (encoded[len - 1] == '\0') {
-        len--;
-    }
-    l = EVP_DecodeBlock(buf, encoded, len);
-    if (-1 == l) {
-        free(buf);
-        return -1;
-    }
-    while ('=' == encoded[--len]) {
-        l--;
-    }
-    buffer->len = l;
-    buffer->data = buf;
+    BIO_free(b64);
     return 0;
 }
 

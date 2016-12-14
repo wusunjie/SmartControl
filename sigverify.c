@@ -106,19 +106,11 @@ static int sigverify_prepare(struct sigverify_ctx *ctx, const unsigned char *dat
         xmlFreeDoc(doc);
         return -1;
     }
-    BIO* bio;
-    bio = BIO_new_mem_buf((void*)(buffer.data), buffer.len);
-    if(bio == NULL) {
-        xmlFreeDoc(doc);
-        return -1;
-    }
-    ctx->pkey = d2i_PUBKEY_bio(bio, NULL);
+    ctx->pkey = d2i_PUBKEY(NULL, (const unsigned char **)&(buffer.data), buffer.len);
     if(ctx->pkey == NULL) {
         xmlFreeDoc(doc);
-        BIO_free(bio);
         return -1;
     }
-    BIO_free(bio);
     ctx->doc = doc;
     ctx->sigNode = sigElement;
     ctx->sigInfoNode = sigInfoElement;
