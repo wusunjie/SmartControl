@@ -15,7 +15,7 @@
 #include "list.h"
 #include "sigverify.h"
 
-const static unsigned char *pubkey = (const unsigned char *)"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAriHX+0Dbpp3i9ZdVShERdb/iNCI7oy0TIi7aNo+9dO8ecIUxupTAiLeofR33XVf66tUjbMjNBCQN+EmkHWlwTG4cEV/sHQ8Q+ogPuyOOQUezNpB3sGqFQ/BdmBrmE/8hLdxGnEMbwPg5YS+20hIMWkDQycEpHvVfprHo5vbAnRwdZnPjCVY/seOKI/VvB76Lun7vLpz7l8TLFu5nrJbGAiOrqylE12fZ/ZDbQ2kR8bFlsEaAMbVVdGHC2Lc41QgsRGITNw349Bb1rj6PipoKQFU9aBkXWDNacTX4cpnUKPfm9mOBohLhAdE/wuRAlFbFy5HB+vG5wEnlsYBQAPHrDQIDAQAB";
+static const unsigned char *pubkey = (const unsigned char *)"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAriHX+0Dbpp3i9ZdVShERdb/iNCI7oy0TIi7aNo+9dO8ecIUxupTAiLeofR33XVf66tUjbMjNBCQN+EmkHWlwTG4cEV/sHQ8Q+ogPuyOOQUezNpB3sGqFQ/BdmBrmE/8hLdxGnEMbwPg5YS+20hIMWkDQycEpHvVfprHo5vbAnRwdZnPjCVY/seOKI/VvB76Lun7vLpz7l8TLFu5nrJbGAiOrqylE12fZ/ZDbQ2kR8bFlsEaAMbVVdGHC2Lc41QgsRGITNw349Bb1rj6PipoKQFU9aBkXWDNacTX4cpnUKPfm9mOBohLhAdE/wuRAlFbFy5HB+vG5wEnlsYBQAPHrDQIDAQAB";
 
 struct tmclient {
 	struct event_base *base;

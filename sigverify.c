@@ -197,11 +197,10 @@ static int SigVerifyXMLOutputWriteCallback(void * context, const char * buffer, 
             break;
             case 3:
             {
-                int ret = 0;
                 EVP_MD_CTX_destroy(ctx->digestCtx);
                 ctx->digestCtx = EVP_MD_CTX_create();
-                ret = EVP_VerifyInit(ctx->digestCtx, ctx->digest);
-                ret = EVP_VerifyUpdate(ctx->digestCtx, buffer, len);
+                EVP_VerifyInit(ctx->digestCtx, ctx->digest);
+                EVP_VerifyUpdate(ctx->digestCtx, buffer, len);
                 ctx->status = 4;
                 return len;
             }
