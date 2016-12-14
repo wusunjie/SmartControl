@@ -105,11 +105,19 @@ static int sigverify_prepare(struct sigverify_ctx *ctx, const unsigned char *dat
         xmlFreeDoc(doc);
         return -1;
     }
-    ctx->pkey = d2i_PUBKEY(NULL, (const unsigned char **)&(buffer.data), buffer.len);
-    if (!ctx->pkey) {
+    BIO* bio;
+    bio = BIO_new_mem_buf((void*)(buffer.data), buffer.len);
+    if(bio == NULL) {
         xmlFreeDoc(doc);
         return -1;
     }
+    ctx->pkey = d2i_PUBKEY_bio(bio, NULL);
+    if(ctx->pkey == NULL) {
+        xmlFreeDoc(doc);
+        BIO_free(bio);
+        return -1;
+    }
+    BIO_free(bio);
     ctx->doc = doc;
     ctx->sigNode = sigElement;
     ctx->sigInfoNode = sigInfoElement;
@@ -189,10 +197,11 @@ static int SigVerifyXMLOutputWriteCallback(void * context, const char * buffer, 
             break;
             case 3:
             {
+                int ret = 0;
                 EVP_MD_CTX_destroy(ctx->digestCtx);
                 ctx->digestCtx = EVP_MD_CTX_create();
-                EVP_VerifyInit(ctx->digestCtx, ctx->digest);
-                EVP_VerifyUpdate(ctx->digestCtx, buffer, len);
+                ret = EVP_VerifyInit(ctx->digestCtx, ctx->digest);
+                ret = EVP_VerifyUpdate(ctx->digestCtx, buffer, len);
                 ctx->status = 4;
                 return len;
             }
