@@ -39,6 +39,7 @@ int sigverify(const unsigned char *data, const unsigned char *pubkey)
 {
     struct sigverify_ctx ctx;
     ERR_load_crypto_strings();
+    OpenSSL_add_all_algorithms();
     decode_buffer_init(&(ctx.buffer));
     decode_buffer_init(&(ctx.dgst));
     if (-1 == sigverify_prepare(&ctx, data, pubkey)) {
@@ -170,7 +171,22 @@ static int signature_verify(struct sigverify_ctx *ctx)
     ctx->canonicalNode = ctx->sigInfoNode;
     buffer = xmlOutputBufferCreateIO(SigVerifyXMLOutputWriteCallback, SigVerifyXMLOutputCloseCallback, ctx, NULL);
     xmlC14NExecute(ctx->doc, SigVerifyXMLC14NIsVisibleCallback, ctx, XML_C14N_1_1, NULL, 0, buffer);
-    ret = xmlOutputBufferClose(buffer);
+    xmlOutputBufferClose(buffer);
+    ret = EVP_VerifyFinal(ctx->digestCtx, ctx->dgst.data, ctx->dgst.len, ctx->pkey);
+    if (1 == ret) {
+        ret = 0;
+    }
+    else {
+        int err;
+        do {
+            err = ERR_get_error();
+            if (err) {
+                printf("error is %s\n", ERR_error_string(err, NULL));
+                fflush(stdout);
+            }
+        } while (err != 0);
+        ret = -1;
+    }
     decode_buffer_clear(&(ctx->dgst));
     return ret;
 }
@@ -220,25 +236,6 @@ static int SigVerifyXMLOutputCloseCallback(void * context)
             case 2:
             {
                 EVP_DigestFinal(ctx->digestCtx, ctx->dgst.data, (unsigned int *)&(ctx->dgst.len));
-            }
-            break;
-            case 4:
-            {
-                int ret = EVP_VerifyFinal(ctx->digestCtx, ctx->dgst.data, ctx->dgst.len, ctx->pkey);
-                if (1 == ret) {
-                    return 0;
-                }
-                else {
-                    int err;
-                    do {
-                        err = ERR_get_error();
-                        if (err) {
-                            printf("error is %s\n", ERR_error_string(err, NULL));
-                            fflush(stdout);
-                        }
-                    } while (err != 0);
-                    return -1;
-                }
             }
             break;
             default:

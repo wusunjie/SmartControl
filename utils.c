@@ -105,6 +105,22 @@ int get_certificate_nonce(unsigned char **buf, unsigned int *size)
 
 int base64_decode(const unsigned char *encoded, unsigned int len, struct decode_buffer *buffer)
 {
+//    BIO *b64, *bmem;
+//    unsigned char *buf = (unsigned char *)malloc(len);
+//    int l;
+//    if (!buf) {
+//        return -1;
+//    }
+//    b64 = BIO_new(BIO_f_base64());
+//    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+//    bmem = BIO_new_mem_buf(encoded,len);
+//    bmem = BIO_push(b64,bmem);
+//    l = BIO_read(bmem, buf, len);
+//    buf[l] = 0;
+//    buffer->len = l - 1;
+//    buffer->data = buf;
+//    BIO_free_all(bmem);
+//    return 0;
     unsigned char *buf = (unsigned char *)malloc(len + 1);
     int l;
     if (!buf) {
