@@ -127,6 +127,9 @@ int base64_decode(const unsigned char *encoded, unsigned int len, struct decode_
             inl += ret;
         }
     }
+    if (NULL == buffer->data) {
+        free(buff);
+    }
     BIO_free(b64);
     return 0;
 }

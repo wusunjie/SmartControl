@@ -111,6 +111,7 @@ static int sigverify_prepare(struct sigverify_ctx *ctx, const unsigned char *dat
         xmlFreeDoc(doc);
         return -1;
     }
+    decode_buffer_clear(&buffer);
     ctx->doc = doc;
     ctx->sigNode = sigElement;
     ctx->sigInfoNode = sigInfoElement;
