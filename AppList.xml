@@ -1,0 +1,24 @@
+<appList>
+<app><appID>0x0000002d</appID><name>DAP Server</name><iconList><icon><mimetype>image/png</mimetype><width>128</width><height>128</height><depth>32</depth><url>/0x0000002d.png</url></icon></iconList><remotingInfo><protocolID>DAP</protocolID></remotingInfo><appInfo><appCategory>0xf0000001</appCategory></appInfo></app>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+<SignedInfo>
+<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<Reference URI="">
+<Transforms>
+<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+</Transforms>
+<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<DigestValue>otCkjiWfv1gulTJ9xKE5anRLUlk=</DigestValue>
+</Reference>
+</SignedInfo>
+<SignatureValue>Yt8/H9FIZzFjbZIOzOrPlz2v77QpUfWd/Xx/fNEntBhb3ueJqA8rrnCPtofPWqYo
+y32453GMS3SAI0bePHdbvsQ2BOyoV8R3hDoL79O9uupGYRrfhcINxvMxUz06xVUY
+pXrfFmLBgjsvAA8uBI4192xaNPxxA1Do8AHLPfxlpn7RPyWbOvEoPp5mpRj138BE
+HjHbZri7eCocdCE2zrTWTgclqW5Ts5tOEE9mp+mkTFPws8v5M6AVd36oXSMMG/HZ
+texZtCqt6m097XC4/7ent0hz7HZZbuDfF/OqcaGu5a6pOo0ERtRe5QNtrqgsQdzi
+wwxVMfvXEbpkgzCxnmPw9w==</SignatureValue>
+<KeyInfo><KeyName/></KeyInfo>
+</Signature>
+</appList>
+

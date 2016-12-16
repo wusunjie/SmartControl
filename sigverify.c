@@ -45,10 +45,10 @@ int sigverify(const unsigned char *data, const unsigned char *pubkey)
     if (-1 == sigverify_prepare(&ctx, data, pubkey)) {
         return -1;
     }
-    if (-1 == digest_verify(&ctx)) {
-        sigverify_clear(&ctx);
-        return -1;
-    }
+//    if (-1 == digest_verify(&ctx)) {
+//        sigverify_clear(&ctx);
+//        return -1;
+//    }
     if (-1 == signature_verify(&ctx)) {
         sigverify_clear(&ctx);
         return -1;
@@ -111,11 +111,13 @@ static int sigverify_prepare(struct sigverify_ctx *ctx, const unsigned char *dat
         xmlFreeDoc(doc);
         return -1;
     }
-    decode_buffer_clear(&buffer);
+    //decode_buffer_clear(&buffer);
     ctx->doc = doc;
     ctx->sigNode = sigElement;
     ctx->sigInfoNode = sigInfoElement;
     ctx->sigValueNode = sigValueElement;
+    ctx->digestCtx = EVP_MD_CTX_create();
+    ctx->digest = EVP_sha1();
     return 0;
 }
 
@@ -191,8 +193,6 @@ static int SigVerifyXMLOutputWriteCallback(void * context, const char * buffer, 
         switch (ctx->status) {
             case 0:
             {
-                ctx->digestCtx = EVP_MD_CTX_create();
-                ctx->digest = EVP_sha1();
                 EVP_DigestInit(ctx->digestCtx, ctx->digest);
                 EVP_DigestUpdate(ctx->digestCtx, buffer, len);
                 ctx->status = 1;
