@@ -20,8 +20,10 @@ struct sigverify_ctx {
     xmlNodePtr sigInfoNode;
     xmlNodePtr sigValueNode;
     int status;
-    struct decode_buffer dgst;
-    struct decode_buffer buffer;
+    unsigned char *dgst;
+    unsigned int dgstLen;
+    unsigned char *buffer;
+    unsigned int bufferLen;
 };
 
 static int SigVerifyXMLOutputWriteCallback(void * context, const char * buffer, int len);
@@ -34,21 +36,17 @@ static int signature_verify(struct sigverify_ctx *ctx);
 static void sigverify_clear(struct sigverify_ctx *ctx);
 
 
-
 int sigverify(const unsigned char *data, const unsigned char *pubkey)
 {
     struct sigverify_ctx ctx;
     ERR_load_crypto_strings();
-    OpenSSL_add_all_algorithms();
-    decode_buffer_init(&(ctx.buffer));
-    decode_buffer_init(&(ctx.dgst));
     if (-1 == sigverify_prepare(&ctx, data, pubkey)) {
         return -1;
     }
-//    if (-1 == digest_verify(&ctx)) {
-//        sigverify_clear(&ctx);
-//        return -1;
-//    }
+    if (-1 == digest_verify(&ctx)) {
+        sigverify_clear(&ctx);
+        return -1;
+    }
     if (-1 == signature_verify(&ctx)) {
         sigverify_clear(&ctx);
         return -1;
@@ -93,25 +91,30 @@ static int sigverify_prepare(struct sigverify_ctx *ctx, const unsigned char *dat
         return -1;
     }
     xmlChar *digestValue = xmlNodeGetContent(digestValueElement);
+    ctx->buffer = ctx->dgst = NULL;
+    ctx->bufferLen = ctx->dgstLen = 0;
     if (digestValue) {
-        if (-1 == base64_decode(digestValue, xmlStrlen(digestValue), &(ctx->buffer))) {
+        if (-1 == base64_decode(digestValue, xmlStrlen(digestValue), &(ctx->buffer), &(ctx->bufferLen))) {
             xmlFreeDoc(doc);
             xmlFree(digestValue);
             return -1;
         }
         xmlFree(digestValue);
     }
-    struct decode_buffer buffer;
-    if (-1 == base64_decode(pubkey, strlen((const char *)pubkey), &buffer)) {
+    unsigned char *buffer = NULL;
+    unsigned int bufferLen = 0;
+    if (-1 == base64_decode(pubkey, strlen((const char *)pubkey), &buffer, &bufferLen)) {
         xmlFreeDoc(doc);
         return -1;
     }
-    ctx->pkey = d2i_PUBKEY(NULL, (const unsigned char **)&(buffer.data), buffer.len);
+    unsigned char *tmp = buffer;
+    ctx->pkey = d2i_PUBKEY(NULL, (const unsigned char **)&buffer, bufferLen);
     if(ctx->pkey == NULL) {
+        free(tmp);
         xmlFreeDoc(doc);
         return -1;
     }
-    //decode_buffer_clear(&buffer);
+    free(tmp);
     ctx->doc = doc;
     ctx->sigNode = sigElement;
     ctx->sigInfoNode = sigInfoElement;
@@ -126,6 +129,8 @@ static void sigverify_clear(struct sigverify_ctx *ctx)
     xmlFreeDoc(ctx->doc);
     EVP_PKEY_free(ctx->pkey);
     EVP_MD_CTX_destroy(ctx->digestCtx);
+    free(ctx->buffer);
+    free(ctx->dgst);
 }
 
 static int digest_verify(struct sigverify_ctx *ctx)
@@ -134,18 +139,18 @@ static int digest_verify(struct sigverify_ctx *ctx)
     ctx->status = 0;
     ctx->canonicalMode = 0;
     ctx->canonicalNode = ctx->sigNode;
-    decode_buffer_append(&(ctx->dgst), 64);
     buffer = xmlOutputBufferCreateIO(SigVerifyXMLOutputWriteCallback, SigVerifyXMLOutputCloseCallback, ctx, NULL);
     xmlC14NExecute(ctx->doc, SigVerifyXMLC14NIsVisibleCallback, ctx, XML_C14N_1_1, NULL, 0, buffer);
     xmlOutputBufferClose(buffer);
-    if (ctx->dgst.len != ctx->buffer.len) {
+    if (ctx->dgstLen == 0) {
         return -1;
     }
-    if (memcmp(ctx->buffer.data, ctx->dgst.data, ctx->dgst.len)) {
+    if (ctx->dgstLen != ctx->bufferLen) {
         return -1;
     }
-    decode_buffer_clear(&(ctx->dgst));
-    decode_buffer_clear(&(ctx->buffer));
+    if (memcmp(ctx->buffer, ctx->dgst, ctx->dgstLen)) {
+        return -1;
+    }
     return 0;
 }
 
@@ -155,7 +160,7 @@ static int signature_verify(struct sigverify_ctx *ctx)
     int ret = 0;
     xmlChar *sigValue = xmlNodeGetContent(ctx->sigValueNode);
     if (sigValue) {
-        if (-1 == base64_decode(sigValue, xmlStrlen(sigValue), &(ctx->dgst))) {
+        if (-1 == base64_decode(sigValue, xmlStrlen(sigValue), &(ctx->dgst), &(ctx->dgstLen))) {
             xmlFree(sigValue);
             return -1;
         }
@@ -167,7 +172,7 @@ static int signature_verify(struct sigverify_ctx *ctx)
     buffer = xmlOutputBufferCreateIO(SigVerifyXMLOutputWriteCallback, SigVerifyXMLOutputCloseCallback, ctx, NULL);
     xmlC14NExecute(ctx->doc, SigVerifyXMLC14NIsVisibleCallback, ctx, XML_C14N_1_1, NULL, 0, buffer);
     xmlOutputBufferClose(buffer);
-    ret = EVP_VerifyFinal(ctx->digestCtx, ctx->dgst.data, ctx->dgst.len, ctx->pkey);
+    ret = EVP_VerifyFinal(ctx->digestCtx, ctx->dgst, ctx->dgstLen, ctx->pkey);
     if (1 == ret) {
         ret = 0;
     }
@@ -182,7 +187,6 @@ static int signature_verify(struct sigverify_ctx *ctx)
         } while (err != 0);
         ret = -1;
     }
-    decode_buffer_clear(&(ctx->dgst));
     return ret;
 }
 
@@ -206,8 +210,6 @@ static int SigVerifyXMLOutputWriteCallback(void * context, const char * buffer, 
             break;
             case 3:
             {
-                EVP_MD_CTX_destroy(ctx->digestCtx);
-                ctx->digestCtx = EVP_MD_CTX_create();
                 EVP_VerifyInit(ctx->digestCtx, ctx->digest);
                 EVP_VerifyUpdate(ctx->digestCtx, buffer, len);
                 ctx->status = 4;
@@ -228,7 +230,10 @@ static int SigVerifyXMLOutputCloseCallback(void * context)
         switch (ctx->status) {
             case 2:
             {
-                EVP_DigestFinal(ctx->digestCtx, ctx->dgst.data, (unsigned int *)&(ctx->dgst.len));
+                ctx->dgst = (unsigned char *)malloc(EVP_MAX_MD_SIZE);
+                if (ctx->dgst) {
+                    EVP_DigestFinal(ctx->digestCtx, ctx->dgst, (unsigned int *)&(ctx->dgstLen));
+                }
             }
             break;
             default:

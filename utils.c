@@ -9,6 +9,7 @@
 
 #include <time.h>
 #include <stdint.h>
+#include <string.h>
 #include <openssl/rand.h>
 #include <openssl/evp.h>
 
@@ -105,49 +106,37 @@ int get_certificate_nonce(unsigned char **buf, unsigned int *size)
     return 0;
 }
 
-int base64_decode(const unsigned char *encoded, unsigned int len, struct decode_buffer *buffer)
+int base64_decode(const unsigned char *encoded, unsigned int len, unsigned char **out, unsigned int *olen)
 {
     BIO *b64, *rbio;
     int inl = 0;
     unsigned char *buff = (unsigned char *)malloc(BSIZE);
-    if ((b64 = BIO_new(BIO_f_base64())) == NULL)
+    if ((b64 = BIO_new(BIO_f_base64())) == NULL) {
+        free(buff);
         return -1;
-    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+    }
+    if (NULL == strchr((const char *)encoded, '\n')) {
+        BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+    }
     rbio = BIO_new_mem_buf((void *)encoded, len);
     rbio = BIO_push(b64, rbio);
 
     for (;;) {
         int ret = BIO_read(rbio, (char *)buff + inl, BSIZE);
         if (ret <= 0) {
-            buffer->data = buff;
-            buffer->len = inl;
+            free(*out);
+            *out = buff;
+            *olen = inl;
             break;
         }
         else {
             inl += ret;
         }
     }
-    if (NULL == buffer->data) {
+    if (NULL == *out) {
         free(buff);
+        return -1;
     }
     BIO_free(b64);
     return 0;
-}
-
-void decode_buffer_init(struct decode_buffer *buffer)
-{
-    buffer->data = NULL;
-    buffer->len = 0;
-}
-
-void decode_buffer_clear(struct decode_buffer *buffer)
-{
-    free(buffer->data);
-    buffer->len = 0;
-}
-
-void decode_buffer_append(struct decode_buffer *buffer, unsigned long len)
-{
-    buffer->data = (unsigned char *)malloc(len);
-    buffer->len = len;
 }
