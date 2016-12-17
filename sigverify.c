@@ -139,6 +139,7 @@ static int digest_verify(struct sigverify_ctx *ctx)
     ctx->status = 0;
     ctx->canonicalMode = 0;
     ctx->canonicalNode = ctx->sigNode;
+    EVP_DigestInit(ctx->digestCtx, ctx->digest);
     buffer = xmlOutputBufferCreateIO(SigVerifyXMLOutputWriteCallback, SigVerifyXMLOutputCloseCallback, ctx, NULL);
     xmlC14NExecute(ctx->doc, SigVerifyXMLC14NIsVisibleCallback, ctx, XML_C14N_1_1, NULL, 0, buffer);
     xmlOutputBufferClose(buffer);
@@ -166,9 +167,10 @@ static int signature_verify(struct sigverify_ctx *ctx)
         }
         xmlFree(sigValue);
     }
-    ctx->status = 3;
+    ctx->status = 2;
     ctx->canonicalMode = 1;
     ctx->canonicalNode = ctx->sigInfoNode;
+    EVP_VerifyInit(ctx->digestCtx, ctx->digest);
     buffer = xmlOutputBufferCreateIO(SigVerifyXMLOutputWriteCallback, SigVerifyXMLOutputCloseCallback, ctx, NULL);
     xmlC14NExecute(ctx->doc, SigVerifyXMLC14NIsVisibleCallback, ctx, XML_C14N_1_1, NULL, 0, buffer);
     xmlOutputBufferClose(buffer);
@@ -197,22 +199,23 @@ static int SigVerifyXMLOutputWriteCallback(void * context, const char * buffer, 
         switch (ctx->status) {
             case 0:
             {
-                EVP_DigestInit(ctx->digestCtx, ctx->digest);
-                EVP_DigestUpdate(ctx->digestCtx, buffer, len);
-                ctx->status = 1;
+                if (len) {
+                    EVP_DigestUpdate(ctx->digestCtx, buffer, len);
+                }
+                else {
+                    ctx->status = 1;
+                }
                 return len;
             }
             break;
-            case 1:
+            case 2:
             {
-                ctx->status = 2;
-            }
-            break;
-            case 3:
-            {
-                EVP_VerifyInit(ctx->digestCtx, ctx->digest);
-                EVP_VerifyUpdate(ctx->digestCtx, buffer, len);
-                ctx->status = 4;
+                if (len) {
+                    EVP_VerifyUpdate(ctx->digestCtx, buffer, len);
+                }
+                else {
+                    ctx->status = 3;
+                }
                 return len;
             }
             break;
@@ -228,7 +231,7 @@ static int SigVerifyXMLOutputCloseCallback(void * context)
     struct sigverify_ctx *ctx = (struct sigverify_ctx *)context;
     if (ctx) {
         switch (ctx->status) {
-            case 2:
+            case 1:
             {
                 ctx->dgst = (unsigned char *)malloc(EVP_MAX_MD_SIZE);
                 if (ctx->dgst) {
