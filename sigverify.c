@@ -197,29 +197,29 @@ static int SigVerifyXMLOutputWriteCallback(void * context, const char * buffer, 
     struct sigverify_ctx *ctx = (struct sigverify_ctx *)context;
     if (ctx) {
         switch (ctx->status) {
-            case 0:
-            {
-                if (len) {
-                    EVP_DigestUpdate(ctx->digestCtx, buffer, len);
-                }
-                else {
-                    ctx->status = 1;
-                }
-                return len;
+        case 0:
+        {
+            if (len) {
+                EVP_DigestUpdate(ctx->digestCtx, buffer, len);
             }
-            break;
-            case 2:
-            {
-                if (len) {
-                    EVP_VerifyUpdate(ctx->digestCtx, buffer, len);
-                }
-                else {
-                    ctx->status = 3;
-                }
-                return len;
+            else {
+                ctx->status = 1;
             }
+            return len;
+        }
             break;
-            default:
+        case 2:
+        {
+            if (len) {
+                EVP_VerifyUpdate(ctx->digestCtx, buffer, len);
+            }
+            else {
+                ctx->status = 3;
+            }
+            return len;
+        }
+            break;
+        default:
             break;
         }
     }
@@ -231,15 +231,15 @@ static int SigVerifyXMLOutputCloseCallback(void * context)
     struct sigverify_ctx *ctx = (struct sigverify_ctx *)context;
     if (ctx) {
         switch (ctx->status) {
-            case 1:
-            {
-                ctx->dgst = (unsigned char *)malloc(EVP_MAX_MD_SIZE);
-                if (ctx->dgst) {
-                    EVP_DigestFinal(ctx->digestCtx, ctx->dgst, (unsigned int *)&(ctx->dgstLen));
-                }
+        case 1:
+        {
+            ctx->dgst = (unsigned char *)malloc(EVP_MAX_MD_SIZE);
+            if (ctx->dgst) {
+                EVP_DigestFinal(ctx->digestCtx, ctx->dgst, (unsigned int *)&(ctx->dgstLen));
             }
+        }
             break;
-            default:
+        default:
             break;
         }
     }
@@ -251,37 +251,37 @@ static int SigVerifyXMLC14NIsVisibleCallback(void *user_data, xmlNodePtr node, x
     struct sigverify_ctx *ctx = (struct sigverify_ctx *)user_data;
     if (ctx) {
         switch (ctx->canonicalMode) {
-            case 0:
-            {
-                if (node == ctx->canonicalNode) {
-                    return 0;
-                }
-                else {
-                    for (xmlNodePtr cur = parent; cur != NULL; cur = cur->parent) {
-                        if (cur == ctx->canonicalNode) {
-                            return 0;
-                        }
-                    }
-                }
-                return 1;
-            }
-            break;
-            case 1:
-            {
-                if (node == ctx->canonicalNode) {
-                    return 1;
-                }
-                else {
-                    for (xmlNodePtr cur = parent; cur != NULL; cur = cur->parent) {
-                        if (cur == ctx->canonicalNode) {
-                            return 1;
-                        }
-                    }
-                }
+        case 0:
+        {
+            if (node == ctx->canonicalNode) {
                 return 0;
             }
+            else {
+                for (xmlNodePtr cur = parent; cur != NULL; cur = cur->parent) {
+                    if (cur == ctx->canonicalNode) {
+                        return 0;
+                    }
+                }
+            }
+            return 1;
+        }
             break;
-            default:
+        case 1:
+        {
+            if (node == ctx->canonicalNode) {
+                return 1;
+            }
+            else {
+                for (xmlNodePtr cur = parent; cur != NULL; cur = cur->parent) {
+                    if (cur == ctx->canonicalNode) {
+                        return 1;
+                    }
+                }
+            }
+            return 0;
+        }
+            break;
+        default:
             break;
         }
     }

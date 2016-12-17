@@ -18,27 +18,27 @@
 static const unsigned char *pubkey = (const unsigned char *)"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAriHX+0Dbpp3i9ZdVShERdb/iNCI7oy0TIi7aNo+9dO8ecIUxupTAiLeofR33XVf66tUjbMjNBCQN+EmkHWlwTG4cEV/sHQ8Q+ogPuyOOQUezNpB3sGqFQ/BdmBrmE/8hLdxGnEMbwPg5YS+20hIMWkDQycEpHvVfprHo5vbAnRwdZnPjCVY/seOKI/VvB76Lun7vLpz7l8TLFu5nrJbGAiOrqylE12fZ/ZDbQ2kR8bFlsEaAMbVVdGHC2Lc41QgsRGITNw349Bb1rj6PipoKQFU9aBkXWDNacTX4cpnUKPfm9mOBohLhAdE/wuRAlFbFy5HB+vG5wEnlsYBQAPHrDQIDAQAB";
 
 struct tmclient {
-	struct event_base *base;
+    struct event_base *base;
     struct connection_cb cb;
     struct list_head servers;
-	int port;
+    int port;
 };
 
 struct tmserver {
-	struct tmclient *client;
-	int status;
+    struct tmclient *client;
+    int status;
     unsigned char *uuid;
     char local_addr[16];
-	struct evhttp_uri *remote_uri;
+    struct evhttp_uri *remote_uri;
 
-	struct evhttp_uri *appserver_ctrl;
-	struct evhttp_uri *appserver_event;
-	int is_appserver_sub;
+    struct evhttp_uri *appserver_ctrl;
+    struct evhttp_uri *appserver_event;
+    int is_appserver_sub;
     char *appserver_sid;
 
-	struct evhttp_uri *profile_ctrl;
-	struct evhttp_uri *profile_event;
-	int is_profile_sub;
+    struct evhttp_uri *profile_ctrl;
+    struct evhttp_uri *profile_event;
+    int is_profile_sub;
     char *profile_sid;
     struct list_head list;
 };
@@ -55,32 +55,32 @@ static int tmclient_send_soap_action(struct tmclient *client, struct tmserver *s
 
 struct tmclient *tmclient_start(struct event_base *base, ev_uint16_t port, struct connection_cb cb)
 {
-	struct evhttp_bound_socket *handle = 0;
-	struct tmclient *client = (struct tmclient *)calloc(1, sizeof(*client));
+    struct evhttp_bound_socket *handle = 0;
+    struct tmclient *client = (struct tmclient *)calloc(1, sizeof(*client));
 
-	if (!client) {
-		return 0;
-	}
-	client->base = base;
+    if (!client) {
+        return 0;
+    }
+    client->base = base;
     client->cb = cb;
     INIT_LIST_HEAD(&(client->servers));
-	struct evhttp *http = evhttp_new(base);
-	if (!http) {
-		free(client);
-		return 0;
-	}
-	evhttp_set_gencb(http, tmclient_event_callback, client);
-	if (0 == (handle = evhttp_bind_socket_with_handle(http, "0.0.0.0", port))) {
-		evhttp_free(http);
-		free(client);
-		return 0;
-	}
+    struct evhttp *http = evhttp_new(base);
+    if (!http) {
+        free(client);
+        return 0;
+    }
+    evhttp_set_gencb(http, tmclient_event_callback, client);
+    if (0 == (handle = evhttp_bind_socket_with_handle(http, "0.0.0.0", port))) {
+        evhttp_free(http);
+        free(client);
+        return 0;
+    }
     if (get_localport(evhttp_bound_socket_get_fd(handle), &(client->port))) {
         evhttp_free(http);
         free(client);
         return 0;
     }
-	return client;
+    return client;
 }
 
 void tmclient_stop(struct tmclient *client)
@@ -113,7 +113,7 @@ struct tmserver *get_description(struct tmclient *client, const char *remote_uri
     struct evhttp_uri *uri = evhttp_uri_parse(remote_uri);
     struct evhttp_connection *conn =
             evhttp_connection_base_new(client->base, 0,
-            evhttp_uri_get_host(uri), evhttp_uri_get_port(uri));
+                                       evhttp_uri_get_host(uri), evhttp_uri_get_port(uri));
     if (!conn) {
         evhttp_uri_free(uri);
         return NULL;
@@ -149,30 +149,30 @@ struct tmserver *get_description(struct tmclient *client, const char *remote_uri
 
 int subscribe_service(struct tmclient *client, struct tmserver *server, int sid)
 {
-	if (server) {
-		struct evhttp_request *req = 0;
-		struct evhttp_connection *conn = 0;
-		struct evhttp_uri *event_uri = 0;
-		char path_buf[256] = {0};
+    if (server) {
+        struct evhttp_request *req = 0;
+        struct evhttp_connection *conn = 0;
+        struct evhttp_uri *event_uri = 0;
+        char path_buf[256] = {0};
         const char *host = 0;
         int port = -1;
-		if (!server->status) {
-			return -1;
-		}
+        if (!server->status) {
+            return -1;
+        }
 
-		if (0 == sid) {
-			event_uri = server->appserver_event;
-		}
-		else if (1 == sid) {
-			event_uri = server->profile_event;
-		}
-		else {
-			//
-		}
+        if (0 == sid) {
+            event_uri = server->appserver_event;
+        }
+        else if (1 == sid) {
+            event_uri = server->profile_event;
+        }
+        else {
+            //
+        }
 
-		if (!event_uri) {
-			return -1;
-		}
+        if (!event_uri) {
+            return -1;
+        }
         host = evhttp_uri_get_host(event_uri);
         port = evhttp_uri_get_port(event_uri);
         if ((NULL == host) || (0 == strlen(host))) {
@@ -181,42 +181,42 @@ int subscribe_service(struct tmclient *client, struct tmserver *server, int sid)
         if (-1 == port) {
             port = evhttp_uri_get_port(server->remote_uri);
         }
-		conn = evhttp_connection_base_new(client->base, 0,
-                host, port);
-		if (!conn) {
-			return -1;
-		}
-		evhttp_connection_set_timeout(conn, -1);
-		evhttp_connection_set_retries(conn, 5000);
-		req = evhttp_request_new(tmclient_soap_callback, server);
-		if (!req) {
-			evhttp_connection_free(conn);
-			return -1;
-		}
+        conn = evhttp_connection_base_new(client->base, 0,
+                                          host, port);
+        if (!conn) {
+            return -1;
+        }
+        evhttp_connection_set_timeout(conn, -1);
+        evhttp_connection_set_retries(conn, 5000);
+        req = evhttp_request_new(tmclient_soap_callback, server);
+        if (!req) {
+            evhttp_connection_free(conn);
+            return -1;
+        }
 
         sprintf(path_buf, "%s:%d", host, port);
-		evhttp_add_header(evhttp_request_get_output_headers(req), "HOST", path_buf);
+        evhttp_add_header(evhttp_request_get_output_headers(req), "HOST", path_buf);
 
-		memset(path_buf, 0, 256);
+        memset(path_buf, 0, 256);
         sprintf(path_buf, "<http://%s:%d>", server->local_addr, client->port);
         evhttp_add_header(evhttp_request_get_output_headers(req), "CALLBACK", path_buf);
-		evhttp_add_header(evhttp_request_get_output_headers(req), "NT", "upnp:event");
+        evhttp_add_header(evhttp_request_get_output_headers(req), "NT", "upnp:event");
 
-		memset(path_buf, 0, 256);
-		strcpy(path_buf, evhttp_uri_get_path(event_uri));
-		if (0 != evhttp_uri_get_query(event_uri)) {
-			strcat(path_buf, "?");
-			strcat(path_buf, evhttp_uri_get_query(event_uri));
-		}
+        memset(path_buf, 0, 256);
+        strcpy(path_buf, evhttp_uri_get_path(event_uri));
+        if (0 != evhttp_uri_get_query(event_uri)) {
+            strcat(path_buf, "?");
+            strcat(path_buf, evhttp_uri_get_query(event_uri));
+        }
 
         if (-1 == evhttp_make_request(conn, req, EVHTTP_REQ_SUB, path_buf)) {
-			evhttp_request_free(req);
-			evhttp_connection_free(conn);
-			return -1;
-		}
-		return 0;
-	}
-	return -1;
+            evhttp_request_free(req);
+            evhttp_connection_free(conn);
+            return -1;
+        }
+        return 0;
+    }
+    return -1;
 }
 
 int get_application_list(struct tmclient *client, struct tmserver *server, int profile, const char *filter)
@@ -271,7 +271,7 @@ static int tmclient_send_soap_action(struct tmclient *client, struct tmserver *s
             port = evhttp_uri_get_port(server->remote_uri);
         }
         conn = evhttp_connection_base_new(client->base, 0,
-                host, port);
+                                          host, port);
         if (!conn) {
             return -1;
         }
@@ -300,15 +300,15 @@ static int tmclient_send_soap_action(struct tmclient *client, struct tmserver *s
 
         memset(path_buf, 0, 65536);
         sprintf(path_buf, "<?xml version=\"1.0\"?>"
-                "<s:Envelope "
-                "xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
-                "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">"
-                "<s:Body>"
-                "<u:%s xmlns:u=\"%s\">"
-                "%s"
-                "</u:%s>"
-                "</s:Body>"
-                "</s:Envelope>", action, serviceType, body, action);
+                          "<s:Envelope "
+                          "xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
+                          "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">"
+                          "<s:Body>"
+                          "<u:%s xmlns:u=\"%s\">"
+                          "%s"
+                          "</u:%s>"
+                          "</s:Body>"
+                          "</s:Envelope>", action, serviceType, body, action);
 
         evbuffer_add(evhttp_request_get_output_buffer(req), path_buf, strlen(path_buf));
 
@@ -324,10 +324,10 @@ static int tmclient_send_soap_action(struct tmclient *client, struct tmserver *s
 
 static void tmclient_event_callback(struct evhttp_request *req, void *args)
 {
-	struct tmclient *client = (struct tmclient *)args;
-	struct tmserver *server = 0;
-	struct evbuffer *buf = 0;
-	ssize_t buflen = 0;
+    struct tmclient *client = (struct tmclient *)args;
+    struct tmserver *server = 0;
+    struct evbuffer *buf = 0;
+    ssize_t buflen = 0;
 
     server = check_event(client, req);
 
@@ -349,95 +349,95 @@ static void tmclient_event_callback(struct evhttp_request *req, void *args)
 
 static void tmclient_soap_callback(struct evhttp_request *req, void *args)
 {
-	switch (evhttp_request_get_command(req)) {
-		case EVHTTP_REQ_GET:
-		{
-			struct tmserver *server = (struct tmserver *)args;
-            if (!server) {
-                return;
-            }
-            if (!strcmp(evhttp_request_get_uri(req),
-                evhttp_uri_get_path(server->remote_uri))) {
-				if (200 == evhttp_request_get_response_code(req)) {
-                    struct evbuffer *buf;
-                    size_t buflen;
-                    buf = evhttp_request_get_input_buffer(req);
-                    buflen = evbuffer_get_length(buf);
-                    if (buflen) {
-                        char *data = (char *)malloc(buflen + 1);
-                        if (data) {
-                            data[buflen] = 0;
-                            evbuffer_remove(buf, data, buflen);
-                            if (!parse_device_desc(server, BAD_CAST data)) {
-                                server->status = 1;
-                            }
-                            free(data);
+    switch (evhttp_request_get_command(req)) {
+    case EVHTTP_REQ_GET:
+    {
+        struct tmserver *server = (struct tmserver *)args;
+        if (!server) {
+            return;
+        }
+        if (!strcmp(evhttp_request_get_uri(req),
+                    evhttp_uri_get_path(server->remote_uri))) {
+            if (200 == evhttp_request_get_response_code(req)) {
+                struct evbuffer *buf;
+                size_t buflen;
+                buf = evhttp_request_get_input_buffer(req);
+                buflen = evbuffer_get_length(buf);
+                if (buflen) {
+                    char *data = (char *)malloc(buflen + 1);
+                    if (data) {
+                        data[buflen] = 0;
+                        evbuffer_remove(buf, data, buflen);
+                        if (!parse_device_desc(server, BAD_CAST data)) {
+                            server->status = 1;
                         }
+                        free(data);
                     }
-				}
-                if (server->client && server->client->cb.server_added) {
-                    server->client->cb.server_added(server->client, server);
                 }
             }
-		}
-		break;
-		case EVHTTP_REQ_POST:
-        {
-            struct tmserver *server = (struct tmserver *)args;
-            if (!server) {
-                return;
+            if (server->client && server->client->cb.server_added) {
+                server->client->cb.server_added(server->client, server);
             }
-            struct evbuffer *buf;
-            size_t buflen;
-            buf = evhttp_request_get_input_buffer(req);
-            buflen = evbuffer_get_length(buf);
-            if (buflen) {
-                char *data = (char *)malloc(buflen + 1);
-                if (data) {
-                    data[buflen] = 0;
-                    evbuffer_remove(buf, data, buflen);
-                    parse_action_response(server, BAD_CAST data, evhttp_request_get_response_code(req));
-                    free(data);
+        }
+    }
+        break;
+    case EVHTTP_REQ_POST:
+    {
+        struct tmserver *server = (struct tmserver *)args;
+        if (!server) {
+            return;
+        }
+        struct evbuffer *buf;
+        size_t buflen;
+        buf = evhttp_request_get_input_buffer(req);
+        buflen = evbuffer_get_length(buf);
+        if (buflen) {
+            char *data = (char *)malloc(buflen + 1);
+            if (data) {
+                data[buflen] = 0;
+                evbuffer_remove(buf, data, buflen);
+                parse_action_response(server, BAD_CAST data, evhttp_request_get_response_code(req));
+                free(data);
+            }
+        }
+    }
+        break;
+    case EVHTTP_REQ_SUB:
+    {
+        if (200 == evhttp_request_get_response_code(req)) {
+            struct tmserver *server = (struct tmserver *)args;
+            if (!strcmp(evhttp_request_get_uri(req),
+                        evhttp_uri_get_path(server->appserver_event))) {
+                struct evkeyvalq *headers = evhttp_request_get_input_headers(req);
+                struct evkeyval *header;
+                for (header = headers->tqh_first; header;
+                     header = header->next.tqe_next) {
+                    if (0 == strcasecmp("SID", header->key)) {
+                        server->appserver_sid = strdup(header->value);
+                        server->is_appserver_sub = 1;
+                        break;
+                    }
+                }
+            }
+            else if (!strcmp(evhttp_request_get_uri(req),
+                             evhttp_uri_get_path(server->profile_event))) {
+                struct evkeyvalq *headers = evhttp_request_get_input_headers(req);
+                struct evkeyval *header;
+                for (header = headers->tqh_first; header;
+                     header = header->next.tqe_next) {
+                    if (0 == strcasecmp("SID", header->key)) {
+                        server->profile_sid = strdup(header->value);
+                        server->is_profile_sub = 1;
+                        break;
+                    }
                 }
             }
         }
-		break;
-		case EVHTTP_REQ_SUB:
-		{
-			if (200 == evhttp_request_get_response_code(req)) {
-				struct tmserver *server = (struct tmserver *)args;
-                if (!strcmp(evhttp_request_get_uri(req),
-					evhttp_uri_get_path(server->appserver_event))) {
-                    struct evkeyvalq *headers = evhttp_request_get_input_headers(req);
-                    struct evkeyval *header;
-                    for (header = headers->tqh_first; header;
-                        header = header->next.tqe_next) {
-                        if (0 == strcasecmp("SID", header->key)) {
-                            server->appserver_sid = strdup(header->value);
-                            server->is_appserver_sub = 1;
-                            break;
-                        }
-                    }
-				}
-                else if (!strcmp(evhttp_request_get_uri(req),
-					evhttp_uri_get_path(server->profile_event))) {
-                    struct evkeyvalq *headers = evhttp_request_get_input_headers(req);
-                    struct evkeyval *header;
-                    for (header = headers->tqh_first; header;
-                        header = header->next.tqe_next) {
-                        if (0 == strcasecmp("SID", header->key)) {
-                            server->profile_sid = strdup(header->value);
-                            server->is_profile_sub = 1;
-                            break;
-                        }
-                    }
-				}
-			}
-		}
-		break;
-		default:
-		break;
-	}
+    }
+        break;
+    default:
+        break;
+    }
 }
 
 static int parse_device_desc(struct tmserver *server, xmlChar *data)
@@ -677,9 +677,9 @@ static struct tmserver *check_event(struct tmclient *client, struct evhttp_reque
     }
 
     for (header = headers->tqh_first; header;
-        header = header->next.tqe_next) {
+         header = header->next.tqe_next) {
         if ((0 == strcasecmp("NTS", header->key))
-            && (0 == strcasecmp("upnp:propchange", header->value))) {
+                && (0 == strcasecmp("upnp:propchange", header->value))) {
             is_event = 1;
         }
         if (0 == strcasecmp("SID", header->key)) {

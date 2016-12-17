@@ -53,7 +53,7 @@ int get_localaddr(char *local, const char *remote)
             continue;
         }
         if (((((struct sockaddr_in *)(ifa->ifa_addr))->sin_addr.s_addr) & (((struct sockaddr_in *)(ifa->ifa_netmask))->sin_addr.s_addr)) ==
-        (addr.s_addr & (((struct sockaddr_in *)(ifa->ifa_netmask))->sin_addr.s_addr))) {
+                (addr.s_addr & (((struct sockaddr_in *)(ifa->ifa_netmask))->sin_addr.s_addr))) {
             strncpy(local, inet_ntoa(((struct sockaddr_in *)(ifa->ifa_addr))->sin_addr), 16);
             freeifaddrs(ifaddr);
             return 0;

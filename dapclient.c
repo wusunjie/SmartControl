@@ -71,19 +71,19 @@ static void dapclient_event_cb(struct bufferevent *bev, short what, void *ctx)
     (void)bev;
     (void)ctx;
     switch (what) {
-        case BEV_EVENT_READING:
+    case BEV_EVENT_READING:
         break;
-        case BEV_EVENT_WRITING:
+    case BEV_EVENT_WRITING:
         break;
-        case BEV_EVENT_EOF:
+    case BEV_EVENT_EOF:
         break;
-        case BEV_EVENT_ERROR:
+    case BEV_EVENT_ERROR:
         break;
-        case BEV_EVENT_TIMEOUT:
+    case BEV_EVENT_TIMEOUT:
         break;
-        case BEV_EVENT_CONNECTED:
+    case BEV_EVENT_CONNECTED:
         break;
-        default:
+    default:
         break;
     }
 }
