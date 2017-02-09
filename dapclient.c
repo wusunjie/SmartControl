@@ -100,7 +100,7 @@ static void dapclient_data_cb(struct bufferevent *bev, void *ctx)
                 char *data = (char *)malloc(len + 1);
                 if (data) {
                     data[len] = 0;
-                    if (-1 == evbuffer_copyout(input, data, len)) {
+                    if (-1 != evbuffer_copyout(input, data, len)) {
                         xmlDocPtr doc;
                         doc = xmlParseDoc(data);
                         if (doc) {
@@ -108,6 +108,7 @@ static void dapclient_data_cb(struct bufferevent *bev, void *ctx)
                             xmlNodePtr rootElement = xmlDocGetRootElement(doc);
                             if (!rootElement) {
                                 xmlFreeDoc(doc);
+                                free(data);
                                 return;
                             }
                         }
