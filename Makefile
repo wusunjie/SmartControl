@@ -10,8 +10,10 @@ PKG_CONFIG_LIBS:= \
 	libxml-2.0 \
 	libcrypto
 
+CFLAGS:=-Wall
+
 all: $(SOURCE_FILES)
-	gcc $(SOURCE_FILES) `pkg-config --cflags --libs $(PKG_CONFIG_LIBS)` -o main
+	gcc $(SOURCE_FILES) `pkg-config --cflags --libs $(PKG_CONFIG_LIBS)` $(CFLAGS) -o main
 
 clean:
 	rm -rf *.o

@@ -102,7 +102,7 @@ static void dapclient_data_cb(struct bufferevent *bev, void *ctx)
                     data[len] = 0;
                     if (-1 != evbuffer_copyout(input, data, len)) {
                         xmlDocPtr doc;
-                        doc = xmlParseDoc(data);
+                        doc = xmlParseDoc(BAD_CAST data);
                         if (doc) {
                             evbuffer_drain(input, len);
                             xmlNodePtr rootElement = xmlDocGetRootElement(doc);
