@@ -39,7 +39,6 @@ static void sigverify_clear(struct sigverify_ctx *ctx);
 int sigverify(const unsigned char *data, const unsigned char *pubkey)
 {
     struct sigverify_ctx ctx;
-    ERR_load_crypto_strings();
     if (-1 == sigverify_prepare(&ctx, data, pubkey)) {
         return -1;
     }
