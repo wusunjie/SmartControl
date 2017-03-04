@@ -8,9 +8,10 @@ SOURCE_FILES:= \
 PKG_CONFIG_LIBS:= \
 	libevent \
 	libxml-2.0 \
-	libcrypto
+	libcrypto \
+	libusb-1.0
 
-CFLAGS:=-Wall
+CFLAGS:=-Wall -Werror
 
 all: $(SOURCE_FILES)
 	gcc $(SOURCE_FILES) `pkg-config --cflags --libs $(PKG_CONFIG_LIBS)` $(CFLAGS) -o main

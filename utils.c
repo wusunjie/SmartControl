@@ -111,7 +111,8 @@ int base64_decode(const unsigned char *encoded, unsigned int len, unsigned char 
     BIO *b64, *rbio;
     int inl = 0;
     unsigned char *buff = (unsigned char *)malloc(BSIZE);
-    if ((b64 = BIO_new(BIO_f_base64())) == NULL) {
+    b64 = BIO_new(BIO_f_base64());
+    if (b64 == NULL) {
         free(buff);
         return -1;
     }
