@@ -28,7 +28,7 @@ int hs_device_init()
 		LIBUSB_CLASS_VENDOR_SPEC, libusb_hotplug_cb, NULL, &(dev.cb_handle));
 }
 
-int libusb_hotplug_callback_fn(libusb_context *ctx, libusb_device *device, libusb_hotplug_event event, void *user_data)
+int libusb_hotplug_cb(libusb_context *ctx, libusb_device *device, libusb_hotplug_event event, void *user_data)
 {
 	switch (event) {
 		case LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED:
@@ -72,7 +72,7 @@ int libusb_hotplug_callback_fn(libusb_context *ctx, libusb_device *device, libus
 						if ((endpoint->bmAttributes & 0x3) == LIBUSB_TRANSFER_TYPE_CONTROL) {
 							m++;
 						}
-						if (((endpoint->bmAttributes & 0x3) == LIBUSB_TRANSFER_TYPE_BULK)
+						else if (((endpoint->bmAttributes & 0x3) == LIBUSB_TRANSFER_TYPE_BULK)
 							&& ((endpoint->bEndpointAddress & 0x7) == LIBUSB_ENDPOINT_IN)) {
 							m++;
 							n = bEndpointAddress;
@@ -88,11 +88,13 @@ int libusb_hotplug_callback_fn(libusb_context *ctx, libusb_device *device, libus
 								libusb_set_configuration(hsd->dev_handle, config->bConfigurationValue);
 							}
 						}
+						libusb_free_config_descriptor(active);
 						if (!libusb_claim_interface(hsd->dev_handle, ifdesc->bInterfaceNumber)) {
 							hsd->ifnum = ifdesc->bInterfaceNumber;
+							hsd->bulk = n;
+							hsd->busy = 1;
+							break;
 						}
-						hsd->bulk = n;
-						hsd->busy = 1;
 					}
 				}
 			}
