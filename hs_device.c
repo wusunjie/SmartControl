@@ -2,6 +2,25 @@
 #include <string.h>
 #include "list.h"
 
+
+#define HSML_SET_CMD							0x41
+#define HSML_GET_CMD							0xC1
+
+#define HSML_GET_VERSION_REQ					0x40
+#define HSML_GET_PARAMETERS_REQ					0x41
+#define HSML_SET_PARAMETERS_REQ					0x42
+#define HSML_START_FRAMEBUFFER_TRANSMISSION_REQ 0x43
+#define HSML_PAUSE_FRAMEBUFFER_TRANSMISSION_REQ 0x44
+#define HSML_STOP_FRAMEBUFFER_TRANSMISSION_REQ  0x45
+#define HSML_SET_MAX_FRAME_RATE_REQ				0x46
+#define HSML_GET_IDENTIFIER_REQ					0x47
+
+#define HSML_START_FRAMEBUFFER_STREAMING_MODE   0x0000
+#define HSML_START_FRAMEBUFFER_ONDEMAND_MODE    0x0001
+
+#define HSML_SUBCLASS_CODE						0xCC
+#define HSML_PROTOCOL_CODE						0x01
+
 struct hs_device
 {
 	struct libusb_device *device;
@@ -73,10 +92,10 @@ int libusb_hotplug_cb(libusb_context *ctx, libusb_device *device, libusb_hotplug
 				return 0;
 			}
 			libusb_get_device_descriptor(device, &desc);
-			if (0xCC != desc.bDeviceSubClass) {
+			if (HSML_SUBCLASS_CODE != desc.bDeviceSubClass) {
 				return 0;
 			}
-			if (0x01 != desc.bDeviceProtocol) {
+			if (HSML_PROTOCOL_CODE != desc.bDeviceProtocol) {
 				return 0;
 			}
 			if (libusb_get_config_descriptor(device, &config)) {
@@ -90,10 +109,10 @@ int libusb_hotplug_cb(libusb_context *ctx, libusb_device *device, libusb_hotplug
 					if (LIBUSB_CLASS_VENDOR_SPEC != ifdesc->bInterfaceClass) {
 						continue;
 					}
-					if (0xCC != ifdesc->bInterfaceSubClass) {
+					if (HSML_SUBCLASS_CODE != ifdesc->bInterfaceSubClass) {
 						continue;
 					}
-					if (0x01 != ifdesc->bInterfaceProtocol) {
+					if (HSML_PROTOCOL_CODE != ifdesc->bInterfaceProtocol) {
 						continue;
 					}
 					if (2 > ifdesc->bNumEndpoints) {
@@ -155,7 +174,7 @@ void libusb_transfer_control_cb(struct libusb_transfer *transfer)
 				struct libusb_control_setup *setup = (struct libusb_control_setup *)transfer->buffer;
 				if (transfer->actual_length >= LIBUSB_CONTROL_SETUP_SIZE + libusb_le16_to_cpu(setup->wLength)) {
 					switch (setup->bRequest) {
-					case 0x47:
+					case HSML_GET_IDENTIFIER_REQ:
 					{
 
 					}
@@ -239,7 +258,7 @@ int hs_device_open(struct hs_device *dev)
 int hs_device_get_identifier(struct hs_device *dev)
 {
 	unsigned char *buffer = (unsigned char *)malloc(LIBUSB_CONTROL_SETUP_SIZE + 16);
-	libusb_fill_control_setup(buffer, 0x41, 0x44, 0, dev->ifnum, 16);
+	libusb_fill_control_setup(buffer, HSML_GET_CMD, HSML_GET_IDENTIFIER_REQ, 0, dev->ifnum, 16);
 	libusb_fill_control_transfer(dev->control, dev->dev_handle, buffer,
 		libusb_transfer_control_cb, dev, 0);
 	return libusb_submit_transfer(dev->control);
