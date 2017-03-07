@@ -148,6 +148,27 @@ void libusb_transfer_control_cb(struct libusb_transfer *transfer)
 			}
 		}
 		break;
+		case LIBUSB_TRANSFER_COMPLETED:
+		case LIBUSB_TRANSFER_OVERFLOW:
+		{
+			if (transfer->actual_length >= LIBUSB_CONTROL_SETUP_SIZE) {
+				struct libusb_control_setup *setup = (struct libusb_control_setup *)transfer->buffer;
+				if (transfer->actual_length >= LIBUSB_CONTROL_SETUP_SIZE + libusb_le16_to_cpu(setup->wLength)) {
+					switch (setup->bRequest) {
+					case 0x47:
+					{
+
+					}
+					break;
+					default:
+					break;
+					}
+				}
+			}
+		}
+		break;
+		default:
+		break;
 	}
 }
 
@@ -170,6 +191,8 @@ void libusb_transfer_bulk_cb(struct libusb_transfer *transfer)
 				dev->bulk = NULL;
 			}
 		}
+		break;
+		default:
 		break;
 	}
 }
@@ -208,13 +231,15 @@ int hs_device_open(struct hs_device *dev)
 	}
 	dev->control = libusb_alloc_transfer(0);
 	dev->bulk = libusb_alloc_transfer(0);
+	dev->control->flags = LIBUSB_TRANSFER_ADD_ZERO_PACKET | LIBUSB_TRANSFER_FREE_BUFFER;
+	dev->bulk->flags = LIBUSB_TRANSFER_ADD_ZERO_PACKET | LIBUSB_TRANSFER_FREE_BUFFER;
 	return 0;
 }
 
 int hs_device_get_identifier(struct hs_device *dev)
 {
-	unsigned char buffer[8];
-	libusb_fill_control_setup(buffer, 0x41, 0x44, 0, dev->ifnum, 0);
+	unsigned char *buffer = (unsigned char *)malloc(LIBUSB_CONTROL_SETUP_SIZE + 16);
+	libusb_fill_control_setup(buffer, 0x41, 0x44, 0, dev->ifnum, 16);
 	libusb_fill_control_transfer(dev->control, dev->dev_handle, buffer,
 		libusb_transfer_control_cb, dev, 0);
 	return libusb_submit_transfer(dev->control);
