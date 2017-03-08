@@ -131,13 +131,19 @@ int libusb_hotplug_cb(libusb_context *ctx, libusb_device *device, libusb_hotplug
 					}
 					if (2 == m) {
 						struct hs_device *dev = hs_device_create(device, ifdesc->bInterfaceNumber, n);
+						list_add(&hs_device_list, &(dev->list));
 						if (hs_device_uuid) {
 							if (hs_device_open(dev)) {
+								list_del(&(dev->list));
+								hs_device_destory(dev);
+								continue;
+							}
+							else if (hs_device_get_identifier(dev)) {
+								list_del(&(dev->list));
 								hs_device_destory(dev);
 								continue;
 							}
 						}
-						list_add(&hs_device_list, &(dev->list));
 					}
 				}
 			}
