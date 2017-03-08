@@ -1,5 +1,10 @@
 #include <libusb.h>
 #include <string.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <stddef.h>
+#include <stdio.h>
+
 #include "list.h"
 
 
@@ -27,8 +32,8 @@ struct hs_device
 	uint8_t baddr;
 	int ifnum;
 	libusb_device_handle *dev_handle;
-	libusb_transfer *control;
-	libusb_transfer *bulk;
+	struct libusb_transfer *control;
+	struct libusb_transfer *bulk;
 	struct list_head list;
 };
 
@@ -36,12 +41,14 @@ static libusb_context *libusb_ctx = NULL;
 static libusb_hotplug_callback_handle libusb_hotplug_handle;
 static struct hs_device *active_dev = NULL;
 static struct list_head hs_device_list;
-static const char *hs_device_uuid = NULL;
+static char *hs_device_uuid = NULL;
 
 static int libusb_hotplug_cb(libusb_context *ctx, libusb_device *device, libusb_hotplug_event event, void *user_data);
 static void libusb_transfer_control_cb(struct libusb_transfer *transfer);
 static void libusb_transfer_bulk_cb(struct libusb_transfer *transfer);
 static struct hs_device *hs_device_create(struct libusb_device *device, int ifnum, uint8_t baddr);
+static void hs_device_destory(struct hs_device *dev);
+static int hs_device_check_uuid(const char *uuid, const unsigned char *code);
 static int hs_device_open(struct hs_device *dev);
 static int hs_device_get_identifier(struct hs_device *dev);
 
@@ -60,7 +67,7 @@ int hs_device_init()
 		LIBUSB_CLASS_VENDOR_SPEC, libusb_hotplug_cb, NULL, &libusb_hotplug_handle);
 }
 
-int hs_device_start(const char *uuid)
+void hs_device_start(const char *uuid)
 {
 	struct hs_device *dev;
 	struct hs_device *tmp;
@@ -68,12 +75,15 @@ int hs_device_start(const char *uuid)
 		free(hs_device_uuid);
 	}
 	hs_device_uuid = strdup(uuid);
-	list_for_each_entry(dev, tmp, &hs_device_list, list) {
-		if (hs_device_open(dev)) {
-			list_del(&(dev->list));
-			hs_device_destory(dev);
+	if (hs_device_list) {
+		list_for_each_entry_safe(dev, tmp, &hs_device_list, list) {
+			if (hs_device_open(dev)) {
+				list_del(&(dev->list));
+				hs_device_destory(dev);
+			}
 		}
-		else if (hs_device_get_identifier(dev)) {
+		dev = list_first_entry(&hs_device_list, typeof(*dev), list);
+		if (hs_device_get_identifier(dev)) {
 			list_del(&(dev->list));
 			hs_device_destory(dev);
 		}
@@ -98,39 +108,39 @@ int libusb_hotplug_cb(libusb_context *ctx, libusb_device *device, libusb_hotplug
 			if (HSML_PROTOCOL_CODE != desc.bDeviceProtocol) {
 				return 0;
 			}
-			if (libusb_get_config_descriptor(device, &config)) {
+			if (libusb_get_active_config_descriptor(device, &config)) {
 				return 0;
 			}
 			for (i = 0; i < config->bNumInterfaces; i++) {
 				for (j = 0; j < config->interface[i].num_altsetting; j++) {
-					const struct libusb_interface_descriptor *ifdesc = config->interface[i].altsetting[j];
+					const struct libusb_interface_descriptor ifdesc = config->interface[i].altsetting[j];
 					int m = 0;
 					uint8_t n = 0;
-					if (LIBUSB_CLASS_VENDOR_SPEC != ifdesc->bInterfaceClass) {
+					if (LIBUSB_CLASS_VENDOR_SPEC != ifdesc.bInterfaceClass) {
 						continue;
 					}
-					if (HSML_SUBCLASS_CODE != ifdesc->bInterfaceSubClass) {
+					if (HSML_SUBCLASS_CODE != ifdesc.bInterfaceSubClass) {
 						continue;
 					}
-					if (HSML_PROTOCOL_CODE != ifdesc->bInterfaceProtocol) {
+					if (HSML_PROTOCOL_CODE != ifdesc.bInterfaceProtocol) {
 						continue;
 					}
-					if (2 > ifdesc->bNumEndpoints) {
+					if (2 > ifdesc.bNumEndpoints) {
 						continue;
 					}
-					for (k = 0; k < ifdesc->bNumEndpoints; k++) {
-						const struct libusb_endpoint_descriptor *endpoint = ifdesc->endpoint[k];
-						if ((endpoint->bmAttributes & 0x3) == LIBUSB_TRANSFER_TYPE_CONTROL) {
+					for (k = 0; k < ifdesc.bNumEndpoints; k++) {
+						const struct libusb_endpoint_descriptor endpoint = ifdesc.endpoint[k];
+						if ((endpoint.bmAttributes & 0x3) == LIBUSB_TRANSFER_TYPE_CONTROL) {
 							m++;
 						}
-						else if (((endpoint->bmAttributes & 0x3) == LIBUSB_TRANSFER_TYPE_BULK)
-							&& ((endpoint->bEndpointAddress & 0x7) == LIBUSB_ENDPOINT_IN)) {
+						else if (((endpoint.bmAttributes & 0x3) == LIBUSB_TRANSFER_TYPE_BULK)
+							&& ((endpoint.bEndpointAddress & 0x7) == LIBUSB_ENDPOINT_IN)) {
 							m++;
-							n = bEndpointAddress;
+							n = endpoint.bEndpointAddress;
 						}
 					}
 					if (2 == m) {
-						struct hs_device *dev = hs_device_create(device, ifdesc->bInterfaceNumber, n);
+						struct hs_device *dev = hs_device_create(device, ifdesc.bInterfaceNumber, n);
 						list_add(&hs_device_list, &(dev->list));
 						if (hs_device_uuid) {
 							if (hs_device_open(dev)) {
@@ -150,7 +160,12 @@ int libusb_hotplug_cb(libusb_context *ctx, libusb_device *device, libusb_hotplug
 			libusb_free_config_descriptor(config);
 		}
 		break;
+		case LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT:
+		break;
+		default:
+		break;
 	}
+	return 0;
 }
 
 void libusb_transfer_control_cb(struct libusb_transfer *transfer)
@@ -161,7 +176,7 @@ void libusb_transfer_control_cb(struct libusb_transfer *transfer)
 		{
 			if (!dev->bulk) {
 				list_del(&(dev->list));
-				libusb_release_interface(dev->device, dev->ifnum);
+				libusb_release_interface(dev->dev_handle, dev->ifnum);
 				libusb_free_transfer(dev->control);
 				libusb_close(dev->dev_handle);
 				libusb_unref_device(dev->device);
@@ -171,6 +186,7 @@ void libusb_transfer_control_cb(struct libusb_transfer *transfer)
 				libusb_free_transfer(dev->control);
 				dev->control = NULL;
 			}
+			return;
 		}
 		break;
 		case LIBUSB_TRANSFER_COMPLETED:
@@ -182,7 +198,21 @@ void libusb_transfer_control_cb(struct libusb_transfer *transfer)
 					switch (setup->bRequest) {
 					case HSML_GET_IDENTIFIER_REQ:
 					{
-
+						if (active_dev) {
+							return;
+						}
+						if (!hs_device_check_uuid(hs_device_uuid, (unsigned char *)(setup + 1))) {
+							list_del(&(dev->list));
+							hs_device_destory(dev);
+							dev = list_first_entry(&hs_device_list, typeof(*dev), list);
+							if (hs_device_get_identifier(dev)) {
+								list_del(&(dev->list));
+								hs_device_destory(dev);
+							}
+						}
+						else {
+							active_dev = dev;
+						}
 					}
 					break;
 					default:
@@ -190,10 +220,24 @@ void libusb_transfer_control_cb(struct libusb_transfer *transfer)
 					}
 				}
 			}
+			return;
 		}
 		break;
 		default:
 		break;
+	}
+
+	if (!active_dev) {
+		struct libusb_control_setup *setup = (struct libusb_control_setup *)transfer->buffer;
+		if (transfer->actual_length >= LIBUSB_CONTROL_SETUP_SIZE) {
+			if (setup->bRequest == HSML_GET_IDENTIFIER_REQ) {
+				dev = list_first_entry(&hs_device_list, typeof(*dev), list);
+				if (hs_device_get_identifier(dev)) {
+					list_del(&(dev->list));
+					hs_device_destory(dev);
+				}
+			}
+		}
 	}
 }
 
@@ -205,7 +249,7 @@ void libusb_transfer_bulk_cb(struct libusb_transfer *transfer)
 		{
 			if (!dev->control) {
 				list_del(&(dev->list));
-				libusb_release_interface(dev->device, dev->ifnum);
+				libusb_release_interface(dev->dev_handle, dev->ifnum);
 				libusb_free_transfer(dev->bulk);
 				libusb_close(dev->dev_handle);
 				libusb_unref_device(dev->device);
@@ -235,7 +279,7 @@ void hs_device_destory(struct hs_device *dev)
 {
 	if (dev) {
 		if (libusb_cancel_transfer(dev->control) && libusb_cancel_transfer(dev->bulk)) {
-			libusb_release_interface(dev->device, dev->ifnum);
+			libusb_release_interface(dev->dev_handle, dev->ifnum);
 			libusb_free_transfer(dev->control);
 			libusb_free_transfer(dev->bulk);
 			libusb_close(dev->dev_handle);
@@ -268,4 +312,32 @@ int hs_device_get_identifier(struct hs_device *dev)
 	libusb_fill_control_transfer(dev->control, dev->dev_handle, buffer,
 		libusb_transfer_control_cb, dev, 0);
 	return libusb_submit_transfer(dev->control);
+}
+
+int hs_device_check_uuid(const char *uuid, const unsigned char *code)
+{
+	int i, k = 0, m = 0;
+	unsigned char t;
+	for (i = 0; (i < strlen(uuid)) && (m < 16); i++) {
+		if (isxdigit(uuid[i])) {
+			if (k) {
+				unsigned char x = 0;
+				sscanf(uuid + i, "%1hhx", &x);
+				t |= x & 0x0F;
+				if (t != code[m]) {
+					return 0;
+				}
+				m++;
+				k = 0;
+				t = 0;
+			}
+			else {
+				unsigned char x = 0;
+				sscanf(uuid + i, "%1hhx", &x);
+				t = x << 4;
+				k++;
+			}
+		}
+	}
+	return 1;
 }
