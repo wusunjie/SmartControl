@@ -304,7 +304,7 @@ int hs_device_open(struct hs_device *dev)
 	}
 	dev->control = libusb_alloc_transfer(0);
 	dev->bulk = libusb_alloc_transfer(0);
-	dev->control->flags = LIBUSB_TRANSFER_ADD_ZERO_PACKET | LIBUSB_TRANSFER_FREE_BUFFER;
+	dev->control->flags = LIBUSB_TRANSFER_FREE_BUFFER;
 	dev->bulk->flags = LIBUSB_TRANSFER_ADD_ZERO_PACKET | LIBUSB_TRANSFER_FREE_BUFFER;
 	return 0;
 }
