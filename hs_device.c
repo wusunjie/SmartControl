@@ -49,6 +49,7 @@ static void libusb_transfer_bulk_cb(struct libusb_transfer *transfer);
 static struct hs_device *hs_device_create(struct libusb_device *device, int ifnum, uint8_t baddr);
 static void hs_device_destory(struct hs_device *dev);
 static int hs_device_check_uuid(const char *uuid, const unsigned char *code);
+static void hs_device_retrive_next(struct hs_device *dev);
 static int hs_device_open(struct hs_device *dev);
 static int hs_device_get_identifier(struct hs_device *dev);
 
@@ -202,15 +203,7 @@ void libusb_transfer_control_cb(struct libusb_transfer *transfer)
 							return;
 						}
 						if (!hs_device_check_uuid(hs_device_uuid, (unsigned char *)(setup + 1))) {
-							list_del(&(dev->list));
-							hs_device_destory(dev);
-							dev = list_first_entry(&hs_device_list, typeof(*dev), list);
-							if (dev) {
-								if (hs_device_get_identifier(dev)) {
-									list_del(&(dev->list));
-									hs_device_destory(dev);
-								}
-							}
+							hs_device_retrive_next(dev);
 						}
 						else {
 							active_dev = dev;
@@ -233,16 +226,21 @@ void libusb_transfer_control_cb(struct libusb_transfer *transfer)
 		struct libusb_control_setup *setup = (struct libusb_control_setup *)transfer->buffer;
 		if (transfer->actual_length >= LIBUSB_CONTROL_SETUP_SIZE) {
 			if (setup->bRequest == HSML_GET_IDENTIFIER_REQ) {
-				list_del(&(dev->list));
-				hs_device_destory(dev);
-				dev = list_first_entry(&hs_device_list, typeof(*dev), list);
-				if (dev) {
-					if (hs_device_get_identifier(dev)) {
-						list_del(&(dev->list));
-						hs_device_destory(dev);
-					}
-				}
+				hs_device_retrive_next(dev);
 			}
+		}
+	}
+}
+
+void hs_device_retrive_next(struct hs_device *dev)
+{
+	list_del(&(dev->list));
+	hs_device_destory(dev);
+	dev = list_first_entry(&hs_device_list, typeof(*dev), list);
+	if (dev) {
+		if (hs_device_get_identifier(dev)) {
+			list_del(&(dev->list));
+			hs_device_destory(dev);
 		}
 	}
 }
